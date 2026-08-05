@@ -1,5 +1,6 @@
 import {
   ClipboardList,
+  Eye,
   EyeOff,
   ExternalLink,
   FileText,
@@ -14,53 +15,21 @@ import {
   Truck
 } from "lucide-react";
 import clsx from "clsx";
-import { useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
+import {
+  useDemoWorkflow,
+  type SupplierReorderMethod,
+  type SupplierStatus,
+  type SupplierUpdateDraft
+} from "../demo/DemoWorkflowContext";
+import NewSupplierDrawer from "./ui/NewSupplierDrawer";
 
-type SupplierStatus = "attivo" | "disattivo";
-
-type ReorderMethod = "sito" | "email" | "whatsapp" | "telefono" | "manuale";
-
-type SupplierCategory =
-  | "Dermocosmesi"
-  | "Consumabili"
-  | "Attrezzature"
-  | "Cera & Depilazione"
-  | "Monouso";
-
-type LinkedProduct = {
-  name: string;
-  sku: string;
-  stockHint: string;
-};
-
-type DemoSupplier = {
-  id: string;
-  name: string;
-  category: SupplierCategory;
-  status: SupplierStatus;
-  lastOrder: string;
-  contact: string;
-  phone: string;
-  email: string;
-  whatsapp: string;
-  website: string;
-  catalogUrl: string;
-  address: string;
-  vat: string;
-  avgDelivery: string;
-  minOrder: string;
-  reorderMethod: ReorderMethod;
-  notes: string;
-  productsCount: number;
-  ordersValue: string;
-  reliability: string;
-  logoTone: "primary" | "mint" | "gold" | "lavender" | "rose";
-  logoInitials: string;
-  linkedProducts: LinkedProduct[];
-};
+type StatusFilter = "tutti" | SupplierStatus;
+type CategoryFilter = "tutti" | string;
+type MethodFilter = "tutti" | SupplierReorderMethod;
 
 const REORDER_META: Record<
-  ReorderMethod,
+  SupplierReorderMethod,
   { label: string; icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }> }
 > = {
   sito: { label: "Sito Web", icon: Globe },
@@ -70,246 +39,84 @@ const REORDER_META: Record<
   manuale: { label: "Manuale", icon: ClipboardList }
 };
 
-const DEMO_SUPPLIERS: DemoSupplier[] = [
-  {
-    id: "f1",
-    name: "DermLab Italia",
-    category: "Dermocosmesi",
-    status: "attivo",
-    lastOrder: "1 ago 2026",
-    contact: "Marco Bianchi",
-    phone: "+39 02 8899 1100",
-    email: "ordini@dermlab.it",
-    whatsapp: "+39 340 112 2200",
-    website: "https://dermlab.it",
-    catalogUrl: "https://dermlab.it/catalogo",
-    address: "Via Tortona 12, Milano",
-    vat: "IT12345678901",
-    avgDelivery: "3–4 giorni",
-    minOrder: "€150",
-    reorderMethod: "sito",
-    notes: "Listino B2B aggiornato mensilmente. Sconto 5% oltre €500.",
-    productsCount: 4,
-    ordersValue: "€4.280",
-    reliability: "98%",
-    logoTone: "primary",
-    logoInitials: "DL",
-    linkedProducts: [
-      { name: "Crema viso idratante", sku: "CR-VIS-01", stockHint: "18 pz" },
-      { name: "Crema corpo nutriente", sku: "CR-COR-02", stockHint: "Scorta bassa" },
-      { name: "Crema lenitiva post", sku: "CR-LN-03", stockHint: "6 pz" },
-      { name: "Siero partner kit", sku: "SR-KIT-01", stockHint: "Catalogo" }
-    ]
-  },
-  {
-    id: "f2",
-    name: "GlowSupply",
-    category: "Dermocosmesi",
-    status: "attivo",
-    lastOrder: "28 lug 2026",
-    contact: "Elena Verdi",
-    phone: "+39 06 4455 7788",
-    email: "hello@glowsupply.com",
-    whatsapp: "+39 333 990 4411",
-    website: "https://glowsupply.com",
-    catalogUrl: "https://glowsupply.com/b2b",
-    address: "Via Appia Nuova 88, Roma",
-    vat: "IT98765432109",
-    avgDelivery: "2 giorni",
-    minOrder: "€100",
-    reorderMethod: "email",
-    notes: "Preferisce ordini via email con PDF allegato.",
-    productsCount: 2,
-    ordersValue: "€2.140",
-    reliability: "95%",
-    logoTone: "gold",
-    logoInitials: "GS",
-    linkedProducts: [
-      { name: "Siero vitamina C", sku: "SR-VC-01", stockHint: "11 pz" },
-      { name: "Siero acido ialuronico", sku: "SR-HA-02", stockHint: "Esaurito" }
-    ]
-  },
-  {
-    id: "f3",
-    name: "BeautyRaw",
-    category: "Consumabili",
-    status: "attivo",
-    lastOrder: "20 lug 2026",
-    contact: "Sara Neri",
-    phone: "+39 051 220 3344",
-    email: "ordini@beautyraw.it",
-    whatsapp: "+39 348 771 0099",
-    website: "https://beautyraw.it",
-    catalogUrl: "https://beautyraw.it/shop",
-    address: "Via Emilia 45, Bologna",
-    vat: "IT11223344556",
-    avgDelivery: "4–5 giorni",
-    minOrder: "€80",
-    reorderMethod: "whatsapp",
-    notes: "Riordino rapido su WhatsApp Business.",
-    productsCount: 2,
-    ordersValue: "€980",
-    reliability: "92%",
-    logoTone: "mint",
-    logoInitials: "BR",
-    linkedProducts: [
-      { name: "Maschera argilla verde", sku: "MS-AR-01", stockHint: "14 pz" },
-      { name: "Maschera tessuto HA", sku: "MS-TS-02", stockHint: "Scorta bassa" }
-    ]
-  },
-  {
-    id: "f4",
-    name: "SafeClinic",
-    category: "Monouso",
-    status: "attivo",
-    lastOrder: "30 lug 2026",
-    contact: "Luca Conti",
-    phone: "+39 011 556 7788",
-    email: "vendite@safeclinic.it",
-    whatsapp: "+39 320 445 6677",
-    website: "https://safeclinic.it",
-    catalogUrl: "https://safeclinic.it/catalogo-pdf",
-    address: "Corso Francia 210, Torino",
-    vat: "IT55667788990",
-    avgDelivery: "1–2 giorni",
-    minOrder: "€50",
-    reorderMethod: "telefono",
-    notes: "Consegna espresso su Torino e provincia.",
-    productsCount: 2,
-    ordersValue: "€1.560",
-    reliability: "99%",
-    logoTone: "rose",
-    logoInitials: "SC",
-    linkedProducts: [
-      { name: "Guanti nitrile M", sku: "MN-GN-M", stockHint: "120 pz" },
-      { name: "Lenzuolino monouso", sku: "MN-LZ-01", stockHint: "Scorta bassa" }
-    ]
-  },
-  {
-    id: "f5",
-    name: "WaxPro",
-    category: "Cera & Depilazione",
-    status: "attivo",
-    lastOrder: "22 lug 2026",
-    contact: "Anna Greco",
-    phone: "+39 081 334 5566",
-    email: "ordini@waxpro.it",
-    whatsapp: "+39 347 889 0011",
-    website: "https://waxpro.it",
-    catalogUrl: "https://waxpro.it/listino",
-    address: "Via Toledo 100, Napoli",
-    vat: "IT66778899001",
-    avgDelivery: "5 giorni",
-    minOrder: "€120",
-    reorderMethod: "sito",
-    notes: "Portale riordino con tracking lotto.",
-    productsCount: 2,
-    ordersValue: "€760",
-    reliability: "90%",
-    logoTone: "lavender",
-    logoInitials: "WP",
-    linkedProducts: [
-      { name: "Strisce depilatorie", sku: "CN-ST-01", stockHint: "Esaurito" },
-      { name: "Cera professionale hot", sku: "CN-CW-01", stockHint: "7 pz" }
-    ]
-  },
-  {
-    id: "f6",
-    name: "StudioTech",
-    category: "Attrezzature",
-    status: "attivo",
-    lastOrder: "15 giu 2026",
-    contact: "Paolo Ferri",
-    phone: "+39 02 1122 3344",
-    email: "support@studiotech.eu",
-    whatsapp: "+39 331 220 9988",
-    website: "https://studiotech.eu",
-    catalogUrl: "https://studiotech.eu/equipment",
-    address: "Via Mecenate 76, Milano",
-    vat: "IT77889900112",
-    avgDelivery: "7–10 giorni",
-    minOrder: "€300",
-    reorderMethod: "manuale",
-    notes: "Preventivi attrezzature su richiesta. Assistenza inclusa 12 mesi.",
-    productsCount: 1,
-    ordersValue: "€180",
-    reliability: "94%",
-    logoTone: "lavender",
-    logoInitials: "ST",
-    linkedProducts: [
-      { name: "Lampada LED magnifier", sku: "AT-LED-01", stockHint: "2 pz" }
-    ]
-  },
-  {
-    id: "f7",
-    name: "BodyFlow",
-    category: "Consumabili",
-    status: "disattivo",
-    lastOrder: "4 ago 2026",
-    contact: "Giulia Romano",
-    phone: "+39 055 778 9900",
-    email: "b2b@bodyflow.it",
-    whatsapp: "+39 339 554 1122",
-    website: "https://bodyflow.it",
-    catalogUrl: "https://bodyflow.it/refill",
-    address: "Via della Scala 9, Firenze",
-    vat: "IT33445566778",
-    avgDelivery: "3 giorni",
-    minOrder: "€90",
-    reorderMethod: "email",
-    notes: "Temporaneamente sospeso — rinnovo contratto in corso.",
-    productsCount: 1,
-    ordersValue: "€420",
-    reliability: "88%",
-    logoTone: "mint",
-    logoInitials: "BF",
-    linkedProducts: [
-      { name: "Gel refill pressoterapia", sku: "CN-GL-01", stockHint: "Scorta bassa" }
-    ]
-  },
-  {
-    id: "f8",
-    name: "NaturalOil Co",
-    category: "Dermocosmesi",
-    status: "attivo",
-    lastOrder: "3 ago 2026",
-    contact: "Francesca Villa",
-    phone: "+39 049 221 3344",
-    email: "ordini@naturaloil.co",
-    whatsapp: "+39 345 667 8899",
-    website: "https://naturaloil.co",
-    catalogUrl: "https://naturaloil.co/oils",
-    address: "Via Roma 15, Padova",
-    vat: "IT22334455667",
-    avgDelivery: "2–3 giorni",
-    minOrder: "€60",
-    reorderMethod: "whatsapp",
-    notes: "Oli bio certificati. Pack da 6 pezzi.",
-    productsCount: 1,
-    ordersValue: "€310",
-    reliability: "96%",
-    logoTone: "gold",
-    logoInitials: "NO",
-    linkedProducts: [
-      { name: "Olio mandorle dolci", sku: "OL-MD-01", stockHint: "9 pz" }
-    ]
-  }
-];
+const KNOWN_PRODUCT_CODES = new Set([
+  "CR-VIS-01",
+  "CR-COR-02",
+  "SR-VC-01",
+  "SR-HA-02",
+  "MS-AR-01",
+  "MS-TS-02",
+  "OL-MD-01",
+  "MN-GN-M",
+  "MN-LZ-01",
+  "AT-LED-01",
+  "CN-ST-01",
+  "CN-CW-01",
+  "CN-GL-01",
+  "CR-LN-03"
+]);
 
-type StatusFilter = "tutti" | SupplierStatus;
-type CategoryFilter = "tutti" | SupplierCategory;
-type MethodFilter = "tutti" | ReorderMethod;
+function ensureHttp(url: string): string {
+  const t = url.trim();
+  if (!t) return "";
+  if (/^https?:\/\//i.test(t)) return t;
+  return `https://${t}`;
+}
+
+function waDigits(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
 
 export default function SuppliersWorkspace() {
+  const {
+    suppliers,
+    pushToast,
+    updateSupplier,
+    toggleSupplierStatus,
+    deleteSupplier,
+    openInventoryProduct,
+    supplierFocusKey,
+    clearSupplierFocus
+  } = useDemoWorkflow();
+
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("tutti");
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("tutti");
   const [methodFilter, setMethodFilter] = useState<MethodFilter>("tutti");
-  const [selectedId, setSelectedId] = useState(DEMO_SUPPLIERS[0].id);
+  const [selectedId, setSelectedId] = useState(suppliers[0]?.id ?? "");
+  const [newOpen, setNewOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState<SupplierUpdateDraft | null>(null);
+
+  useEffect(() => {
+    if (!supplierFocusKey) return;
+    const key = supplierFocusKey.toLowerCase();
+    const match =
+      suppliers.find((s) => s.id === supplierFocusKey) ??
+      suppliers.find((s) => s.name.toLowerCase() === key);
+    if (match) {
+      setSelectedId(match.id);
+      setStatusFilter("tutti");
+      setCategoryFilter("tutti");
+      setMethodFilter("tutti");
+      setQuery("");
+    } else {
+      pushToast("Fornitore non trovato");
+    }
+    clearSupplierFocus();
+  }, [supplierFocusKey, suppliers, clearSupplierFocus, pushToast]);
+
+  useEffect(() => {
+    if (suppliers.length === 0) return;
+    if (!suppliers.some((s) => s.id === selectedId)) {
+      setSelectedId(suppliers[0].id);
+    }
+  }, [suppliers, selectedId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return DEMO_SUPPLIERS.filter((s) => {
+    return suppliers.filter((s) => {
       if (statusFilter !== "tutti" && s.status !== statusFilter) return false;
       if (categoryFilter !== "tutti" && s.category !== categoryFilter) return false;
       if (methodFilter !== "tutti" && s.reorderMethod !== methodFilter) return false;
@@ -321,16 +128,76 @@ export default function SuppliersWorkspace() {
         s.email.toLowerCase().includes(q)
       );
     });
-  }, [query, statusFilter, categoryFilter, methodFilter]);
+  }, [suppliers, query, statusFilter, categoryFilter, methodFilter]);
 
   const selected =
-    filtered.find((s) => s.id === selectedId) ?? filtered[0] ?? DEMO_SUPPLIERS[0];
+    filtered.find((s) => s.id === selectedId) ??
+    filtered[0] ??
+    suppliers.find((s) => s.id === selectedId) ??
+    suppliers[0];
+
+  if (!selected) {
+    return (
+      <div className="nb-suppliersWs" role="region" aria-label="Workspace Fornitori">
+        <div className="nb-spEmptyState">
+          <p>Nessun fornitore. Creane uno per iniziare.</p>
+          <button type="button" className="nb-newBtn" onClick={() => setNewOpen(true)}>
+            <Plus className="nb-newBtnIcon" aria-hidden={true} />
+            Nuovo fornitore
+          </button>
+        </div>
+        <NewSupplierDrawer
+          open={newOpen}
+          onClose={() => setNewOpen(false)}
+          onCreated={(id) => setSelectedId(id)}
+          subtitle="Anagrafica completa · Fornitori"
+        />
+      </div>
+    );
+  }
 
   const ReorderIcon = REORDER_META[selected.reorderMethod].icon;
 
+  const openUrl = (url: string, emptyMsg: string) => {
+    const href = ensureHttp(url);
+    if (!href) {
+      pushToast(emptyMsg);
+      return;
+    }
+    window.open(href, "_blank", "noopener,noreferrer");
+  };
+
+  const openEdit = () => {
+    setEditDraft({
+      name: selected.name,
+      category: selected.category,
+      contact: selected.contact === "—" ? "" : selected.contact,
+      phone: selected.phone,
+      email: selected.email,
+      whatsapp: selected.whatsapp,
+      website: selected.website,
+      catalogUrl: selected.catalogUrl,
+      address: selected.address === "—" ? "" : selected.address,
+      vat: selected.vat === "—" ? "" : selected.vat,
+      avgDelivery: selected.avgDelivery === "—" ? "" : selected.avgDelivery,
+      minOrder: selected.minOrder === "—" ? "" : selected.minOrder,
+      reorderMethod: selected.reorderMethod,
+      notes: selected.notes,
+      status: selected.status
+    });
+    setEditOpen(true);
+  };
+
+  const openLinkedProduct = (sku: string, name: string) => {
+    if (!KNOWN_PRODUCT_CODES.has(sku)) {
+      pushToast(`Prodotto non in Magazzino · ${name}`);
+      return;
+    }
+    openInventoryProduct(sku);
+  };
+
   return (
     <div className="nb-suppliersWs" role="region" aria-label="Workspace Fornitori">
-      {/* COLONNA 1 — lista */}
       <aside className="nb-spList">
         <div className="nb-spListToolbar">
           <div className="nb-spSearch">
@@ -362,7 +229,7 @@ export default function SuppliersWorkspace() {
               <select
                 className="nb-spSelect"
                 value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)}
+                onChange={(e) => setCategoryFilter(e.target.value)}
               >
                 <option value="tutti">Tutte</option>
                 <option value="Dermocosmesi">Dermocosmesi</option>
@@ -370,6 +237,7 @@ export default function SuppliersWorkspace() {
                 <option value="Attrezzature">Attrezzature</option>
                 <option value="Cera & Depilazione">Cera & Depilazione</option>
                 <option value="Monouso">Monouso</option>
+                <option value="Oli & Essenze">Oli & Essenze</option>
               </select>
             </label>
             <label className="nb-spSelectWrap">
@@ -389,14 +257,14 @@ export default function SuppliersWorkspace() {
             </label>
           </div>
 
-          <button type="button" className="nb-newBtn nb-spNew" disabled>
+          <button type="button" className="nb-newBtn nb-spNew" onClick={() => setNewOpen(true)}>
             <Plus className="nb-newBtnIcon" aria-hidden={true} />
             Nuovo fornitore
           </button>
 
           <div className="nb-spListMeta">
             <span>{filtered.length} fornitori</span>
-            <span className="nb-spListMetaHint">Demo · senza sync</span>
+            <span className="nb-spListMetaHint">Collegato a Magazzino · demo</span>
           </div>
         </div>
 
@@ -436,9 +304,7 @@ export default function SuppliersWorkspace() {
                       <span>Ultimo ordine · {supplier.lastOrder}</span>
                     </span>
                     <span className="nb-spCardFoot">
-                      <span className="nb-spProductBadge">
-                        {supplier.productsCount} prodotti
-                      </span>
+                      <span className="nb-spProductBadge">{supplier.productsCount} prodotti</span>
                       <span className="nb-spMethodChip">
                         <MethodIcon className="nb-spMethodIcon" aria-hidden={true} />
                         {REORDER_META[supplier.reorderMethod].label}
@@ -455,7 +321,6 @@ export default function SuppliersWorkspace() {
         </ul>
       </aside>
 
-      {/* COLONNA 2 — scheda */}
       <section className="nb-spDetail" aria-label={`Scheda ${selected.name}`}>
         <div className="nb-spDetailHead">
           <div className={clsx("nb-spDetailLogo", `tone-${selected.logoTone}`)} aria-hidden={true}>
@@ -479,23 +344,62 @@ export default function SuppliersWorkspace() {
         </div>
 
         <div className="nb-spQuickActions" aria-label="Azioni rapide">
-          <button type="button" className="nb-spQuick" disabled>
+          <button
+            type="button"
+            className="nb-spQuick"
+            onClick={() => openUrl(selected.website, "Nessun sito configurato")}
+          >
             <Globe className="nb-spQuickIcon" aria-hidden={true} />
             Apri sito
           </button>
-          <button type="button" className="nb-spQuick" disabled>
+          <button
+            type="button"
+            className="nb-spQuick"
+            onClick={() => openUrl(selected.catalogUrl, "Nessun catalogo configurato")}
+          >
             <ExternalLink className="nb-spQuickIcon" aria-hidden={true} />
             Apri catalogo
           </button>
-          <button type="button" className="nb-spQuick" disabled>
+          <button
+            type="button"
+            className="nb-spQuick"
+            onClick={() => {
+              if (!selected.email.trim()) {
+                pushToast("Nessuna email configurata");
+                return;
+              }
+              window.open(`mailto:${selected.email}`, "_blank", "noopener,noreferrer");
+            }}
+          >
             <Mail className="nb-spQuickIcon" aria-hidden={true} />
             Invia email
           </button>
-          <button type="button" className="nb-spQuick" disabled>
+          <button
+            type="button"
+            className="nb-spQuick"
+            onClick={() => {
+              const digits = waDigits(selected.whatsapp);
+              if (!digits) {
+                pushToast("Nessun WhatsApp configurato");
+                return;
+              }
+              window.open(`https://wa.me/${digits}`, "_blank", "noopener,noreferrer");
+            }}
+          >
             <MessageSquare className="nb-spQuickIcon" aria-hidden={true} />
             Apri WhatsApp
           </button>
-          <button type="button" className="nb-spQuick" disabled>
+          <button
+            type="button"
+            className="nb-spQuick"
+            onClick={() => {
+              if (!selected.phone.trim()) {
+                pushToast("Nessun telefono configurato");
+                return;
+              }
+              window.open(`tel:${selected.phone.replace(/\s+/g, "")}`, "_self");
+            }}
+          >
             <Phone className="nb-spQuickIcon" aria-hidden={true} />
             Chiama
           </button>
@@ -503,19 +407,19 @@ export default function SuppliersWorkspace() {
 
         <div className="nb-spDetailGrid">
           <Field label="Referente" value={selected.contact} />
-          <Field label="Telefono" value={selected.phone} />
-          <Field label="Email" value={selected.email} />
-          <Field label="WhatsApp" value={selected.whatsapp} />
-          <Field label="Sito Web" value={selected.website.replace("https://", "")} />
-          <Field label="Link Catalogo" value="Catalogo B2B" />
+          <Field label="Telefono" value={selected.phone || "—"} />
+          <Field label="Email" value={selected.email || "—"} />
+          <Field label="WhatsApp" value={selected.whatsapp || "—"} />
+          <Field
+            label="Sito Web"
+            value={selected.website ? selected.website.replace(/^https?:\/\//, "") : "—"}
+          />
+          <Field label="Link Catalogo" value={selected.catalogUrl ? "Catalogo B2B" : "—"} />
           <Field label="Indirizzo" value={selected.address} />
           <Field label="Partita IVA" value={selected.vat} />
           <Field label="Tempi medi consegna" value={selected.avgDelivery} />
           <Field label="Ordine minimo" value={selected.minOrder} />
-          <Field
-            label="Metodo di riordino"
-            value={REORDER_META[selected.reorderMethod].label}
-          />
+          <Field label="Metodo di riordino" value={REORDER_META[selected.reorderMethod].label} />
           <Field label="Ultimo ordine" value={selected.lastOrder} />
         </div>
 
@@ -524,31 +428,38 @@ export default function SuppliersWorkspace() {
             <FileText className="nb-spNotesIcon" aria-hidden={true} />
             Note
           </div>
-          <p className="nb-spNotesBody">{selected.notes}</p>
+          <p className="nb-spNotesBody">{selected.notes || "Nessuna nota."}</p>
         </div>
 
         <div className="nb-spLinkHint">
           <Truck className="nb-spLinkHintIcon" aria-hidden={true} />
-          I prodotti Magazzino potranno essere collegati a questo fornitore (UI ready).
+          Prodotti Magazzino collegati a questo fornitore · clicca un prodotto per aprirlo.
         </div>
 
         <div className="nb-spDetailActions">
-          <button type="button" className="nb-spAction" disabled>
+          <button type="button" className="nb-spAction" onClick={openEdit}>
             <Pencil className="nb-spActionIcon" aria-hidden={true} />
             Modifica
           </button>
-          <button type="button" className="nb-spAction warn" disabled>
-            <EyeOff className="nb-spActionIcon" aria-hidden={true} />
-            Disattiva
+          <button
+            type="button"
+            className="nb-spAction warn"
+            onClick={() => toggleSupplierStatus(selected.id)}
+          >
+            {selected.status === "attivo" ? (
+              <EyeOff className="nb-spActionIcon" aria-hidden={true} />
+            ) : (
+              <Eye className="nb-spActionIcon" aria-hidden={true} />
+            )}
+            {selected.status === "attivo" ? "Disattiva" : "Riattiva"}
           </button>
-          <button type="button" className="nb-spAction danger" disabled>
+          <button type="button" className="nb-spAction danger" onClick={() => setDeleteOpen(true)}>
             <Trash2 className="nb-spActionIcon" aria-hidden={true} />
             Elimina
           </button>
         </div>
       </section>
 
-      {/* COLONNA 3 — stats + prodotti */}
       <aside className="nb-spStats" aria-label="Statistiche fornitore">
         <div className="nb-spStatsHead">
           <h3 className="nb-spStatsTitle">Statistiche</h3>
@@ -565,37 +476,211 @@ export default function SuppliersWorkspace() {
           <Stat label="Valore ordini" value={selected.ordersValue} strong />
           <Stat label="Tempo medio consegna" value={selected.avgDelivery} />
           <Stat label="Affidabilità" value={selected.reliability} accent />
-          <Stat
-            label="Metodo riordino"
-            value={REORDER_META[selected.reorderMethod].label}
-          />
+          <Stat label="Metodo riordino" value={REORDER_META[selected.reorderMethod].label} />
         </div>
 
         <div className="nb-spLinked">
           <div className="nb-spLinkedHead">
             <div>
               <div className="nb-spLinkedTitle">Prodotti collegati</div>
-              <div className="nb-spLinkedSub">Relazione Magazzino · demo</div>
+              <div className="nb-spLinkedSub">Apri in Magazzino</div>
             </div>
             <span className="nb-spProductBadge">{selected.linkedProducts.length}</span>
           </div>
           <ul className="nb-spLinkedList">
             {selected.linkedProducts.map((p) => (
-              <li key={p.sku} className="nb-spLinkedItem">
-                <div className="nb-spLinkedInfo">
-                  <div className="nb-spLinkedName">{p.name}</div>
-                  <div className="nb-spLinkedMeta">
-                    {p.sku} · {p.stockHint}
+              <li key={p.sku}>
+                <button
+                  type="button"
+                  className="nb-spLinkedItem"
+                  onClick={() => openLinkedProduct(p.sku, p.name)}
+                >
+                  <div className="nb-spLinkedInfo">
+                    <div className="nb-spLinkedName">{p.name}</div>
+                    <div className="nb-spLinkedMeta">
+                      {p.sku} · {p.stockHint}
+                    </div>
                   </div>
-                </div>
-                <span className="nb-spLinkedTag">Magazzino</span>
+                  <span className="nb-spLinkedTag">Magazzino</span>
+                </button>
               </li>
             ))}
+            {selected.linkedProducts.length === 0 ? (
+              <li className="nb-spEmpty">Nessun prodotto collegato.</li>
+            ) : null}
           </ul>
         </div>
 
-        <p className="nb-spStatsHint">Demo UI — pronto per collegamento al Core</p>
+        <p className="nb-spStatsHint">Fornitori pronti · collegamento Magazzino attivo</p>
       </aside>
+
+      <NewSupplierDrawer
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        onCreated={(id) => setSelectedId(id)}
+        subtitle="Anagrafica completa · Fornitori"
+      />
+
+      {editOpen && editDraft ? (
+        <EditSupplierDialog
+          draft={editDraft}
+          onChange={setEditDraft}
+          onClose={() => setEditOpen(false)}
+          onSave={() => {
+            if (!editDraft.name.trim()) {
+              pushToast("Inserisci il nome fornitore");
+              return;
+            }
+            updateSupplier(selected.id, editDraft);
+            setEditOpen(false);
+          }}
+        />
+      ) : null}
+
+      {deleteOpen ? (
+        <div className="nb-dialogRoot isOpen" role="presentation">
+          <button
+            type="button"
+            className="nb-dialogBackdrop"
+            aria-label="Annulla"
+            onClick={() => setDeleteOpen(false)}
+          />
+          <div className="nb-dialogCard" role="dialog" aria-modal="true" aria-label="Elimina fornitore">
+            <h2 className="nb-dialogTitle">Eliminare il fornitore?</h2>
+            <p className="nb-dialogSub">
+              “{selected.name}” verrà rimosso dall&apos;anagrafica demo. I prodotti Magazzino restano.
+            </p>
+            <div className="nb-dialogActions">
+              <button type="button" className="nb-ghostBtn" onClick={() => setDeleteOpen(false)}>
+                Annulla
+              </button>
+              <button
+                type="button"
+                className="nb-newBtn nb-ivConfirmDanger"
+                onClick={() => {
+                  const id = selected.id;
+                  setDeleteOpen(false);
+                  deleteSupplier(id);
+                }}
+              >
+                Elimina
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EditSupplierDialog({
+  draft,
+  onChange,
+  onClose,
+  onSave
+}: {
+  draft: SupplierUpdateDraft;
+  onChange: (d: SupplierUpdateDraft) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="nb-dialogRoot isOpen" role="presentation">
+      <button type="button" className="nb-dialogBackdrop" aria-label="Chiudi" onClick={onClose} />
+      <div
+        className="nb-dialogCard nb-spEditDialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Modifica fornitore"
+      >
+        <h2 className="nb-dialogTitle">Modifica fornitore</h2>
+        <p className="nb-dialogSub">Aggiorna anagrafica · demo</p>
+        <div className="nb-spEditForm">
+          <label className="nb-drawerField">
+            <span className="nb-drawerFieldLabel">Nome</span>
+            <input
+              className="nb-drawerInput"
+              value={draft.name}
+              onChange={(e) => onChange({ ...draft, name: e.target.value })}
+            />
+          </label>
+          <label className="nb-drawerField">
+            <span className="nb-drawerFieldLabel">Categoria</span>
+            <input
+              className="nb-drawerInput"
+              value={draft.category}
+              onChange={(e) => onChange({ ...draft, category: e.target.value })}
+            />
+          </label>
+          <label className="nb-drawerField">
+            <span className="nb-drawerFieldLabel">Referente</span>
+            <input
+              className="nb-drawerInput"
+              value={draft.contact}
+              onChange={(e) => onChange({ ...draft, contact: e.target.value })}
+            />
+          </label>
+          <div className="nb-drawerRow2">
+            <label className="nb-drawerField">
+              <span className="nb-drawerFieldLabel">Telefono</span>
+              <input
+                className="nb-drawerInput"
+                value={draft.phone}
+                onChange={(e) => onChange({ ...draft, phone: e.target.value })}
+              />
+            </label>
+            <label className="nb-drawerField">
+              <span className="nb-drawerFieldLabel">WhatsApp</span>
+              <input
+                className="nb-drawerInput"
+                value={draft.whatsapp ?? ""}
+                onChange={(e) => onChange({ ...draft, whatsapp: e.target.value })}
+              />
+            </label>
+          </div>
+          <label className="nb-drawerField">
+            <span className="nb-drawerFieldLabel">Email</span>
+            <input
+              className="nb-drawerInput"
+              value={draft.email}
+              onChange={(e) => onChange({ ...draft, email: e.target.value })}
+            />
+          </label>
+          <label className="nb-drawerField">
+            <span className="nb-drawerFieldLabel">Sito Web</span>
+            <input
+              className="nb-drawerInput"
+              value={draft.website ?? ""}
+              onChange={(e) => onChange({ ...draft, website: e.target.value })}
+            />
+          </label>
+          <label className="nb-drawerField">
+            <span className="nb-drawerFieldLabel">Catalogo</span>
+            <input
+              className="nb-drawerInput"
+              value={draft.catalogUrl ?? ""}
+              onChange={(e) => onChange({ ...draft, catalogUrl: e.target.value })}
+            />
+          </label>
+          <label className="nb-drawerField">
+            <span className="nb-drawerFieldLabel">Note</span>
+            <textarea
+              className="nb-drawerTextarea"
+              rows={3}
+              value={draft.notes}
+              onChange={(e) => onChange({ ...draft, notes: e.target.value })}
+            />
+          </label>
+        </div>
+        <div className="nb-dialogActions">
+          <button type="button" className="nb-ghostBtn" onClick={onClose}>
+            Annulla
+          </button>
+          <button type="button" className="nb-newBtn" onClick={onSave}>
+            Salva
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

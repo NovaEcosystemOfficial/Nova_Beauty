@@ -1,14 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useDemoWorkflow } from "../../demo/DemoWorkflowContext";
+import NewClientDrawer from "./NewClientDrawer";
+import NewServiceDrawer from "./NewServiceDrawer";
 import RightDrawer from "./RightDrawer";
-
-const SERVICES = [
-  { name: "Pulizia viso deep", duration: 60, price: 65 },
-  { name: "Massaggio rilassante", duration: 60, price: 55 },
-  { name: "Epilazione gambe", duration: 45, price: 40 },
-  { name: "Peeling enzimatico", duration: 45, price: 80 },
-  { name: "Pressoterapia", duration: 45, price: 45 }
-];
+import SearchCombobox from "./SearchCombobox";
 
 const OPERATORS = ["Fabio", "Laura"];
 const CABINS = ["Cabina 1", "Cabina 2", "Cabina 3"];
@@ -18,48 +13,85 @@ export default function NewAppointmentDrawer() {
   const {
     newApptDrawerOpen,
     newApptClientId,
+    setNewApptClientId,
     closeNewAppointment,
     bookAppointment,
-    getClient
+    getClient,
+    getService,
+    clients,
+    services
   } = useDemoWorkflow();
-
-  const client = newApptClientId ? getClient(newApptClientId) : undefined;
 
   const [operator, setOperator] = useState(OPERATORS[0]);
   const [cabin, setCabin] = useState(CABINS[0]);
-  const [serviceIdx, setServiceIdx] = useState(0);
+  const [serviceId, setServiceId] = useState<string | null>(null);
   const [timeLabel, setTimeLabel] = useState("17:30");
   const [notes, setNotes] = useState("");
+  const [clientDrawerOpen, setClientDrawerOpen] = useState(false);
+  const [serviceDrawerOpen, setServiceDrawerOpen] = useState(false);
+
+  const wasOpen = useRef(false);
+  const servicesRef = useRef(services);
+  servicesRef.current = services;
 
   useEffect(() => {
-    if (newApptDrawerOpen && client) {
+    if (newApptDrawerOpen && !wasOpen.current) {
       setOperator(OPERATORS[0]);
       setCabin(CABINS[0]);
-      setServiceIdx(0);
+      setServiceId(servicesRef.current[0]?.id ?? null);
       setTimeLabel("17:30");
       setNotes("");
+      setClientDrawerOpen(false);
+      setServiceDrawerOpen(false);
     }
-  }, [newApptDrawerOpen, client]);
+    if (!newApptDrawerOpen) {
+      setClientDrawerOpen(false);
+      setServiceDrawerOpen(false);
+    }
+    wasOpen.current = newApptDrawerOpen;
+  }, [newApptDrawerOpen]);
 
-  const service = SERVICES[serviceIdx];
+  const client = newApptClientId ? getClient(newApptClientId) : undefined;
+  const service = serviceId ? getService(serviceId) : undefined;
 
-  const canBook = useMemo(() => Boolean(client && service), [client, service]);
+  const clientItems = useMemo(
+    () =>
+      clients.map((c) => ({
+        id: c.id,
+        label: c.name,
+        meta: c.phone
+      })),
+    [clients]
+  );
+
+  const serviceItems = useMemo(
+    () =>
+      services.map((s) => ({
+        id: s.id,
+        label: s.name,
+        meta: `${s.durationMin} min · €${s.price}`
+      })),
+    [services]
+  );
+
+  const canBook = Boolean(client && service);
+  const stackedOpen = clientDrawerOpen || serviceDrawerOpen;
 
   return (
-    <RightDrawer
-      open={newApptDrawerOpen}
-      title="Nuovo appuntamento"
-      subtitle="Workflow demo · senza sync"
-      onClose={closeNewAppointment}
-    >
-      {!client ? (
-        <p className="nb-drawerEmpty">Seleziona un cliente.</p>
-      ) : (
+    <>
+      <RightDrawer
+        open={newApptDrawerOpen}
+        title="Nuovo appuntamento"
+        subtitle="Quick create · flusso senza interruzioni"
+        onClose={closeNewAppointment}
+        layer={1}
+        escEnabled={!stackedOpen}
+      >
         <form
           className="nb-drawerForm"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!canBook) return;
+            if (!client || !service) return;
             bookAppointment({
               clientId: client.id,
               client: client.name,
@@ -70,14 +102,22 @@ export default function NewAppointmentDrawer() {
               service: service.name,
               dateLabel: "Mer 5 ago 2026",
               timeLabel,
-              durationMin: service.duration,
+              durationMin: service.durationMin,
               price: service.price,
               notes
             });
           }}
         >
           <Field label="Cliente">
-            <input className="nb-drawerInput" value={client.name} readOnly />
+            <SearchCombobox
+              items={clientItems}
+              valueId={newApptClientId}
+              placeholder="Cerca cliente..."
+              createLabel="Crea nuovo cliente"
+              onSelect={(id) => setNewApptClientId(id)}
+              onClear={() => setNewApptClientId(null)}
+              onCreate={() => setClientDrawerOpen(true)}
+            />
           </Field>
 
           <Field label="Operatore">
@@ -109,17 +149,15 @@ export default function NewAppointmentDrawer() {
           </Field>
 
           <Field label="Servizio">
-            <select
-              className="nb-drawerSelect"
-              value={serviceIdx}
-              onChange={(e) => setServiceIdx(Number(e.target.value))}
-            >
-              {SERVICES.map((s, i) => (
-                <option key={s.name} value={i}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <SearchCombobox
+              items={serviceItems}
+              valueId={serviceId}
+              placeholder="Cerca servizio..."
+              createLabel="Nuovo Servizio"
+              onSelect={setServiceId}
+              onClear={() => setServiceId(null)}
+              onCreate={() => setServiceDrawerOpen(true)}
+            />
           </Field>
 
           <div className="nb-drawerRow2">
@@ -143,10 +181,18 @@ export default function NewAppointmentDrawer() {
 
           <div className="nb-drawerRow2">
             <Field label="Durata">
-              <input className="nb-drawerInput" value={`${service.duration} min`} readOnly />
+              <input
+                className="nb-drawerInput"
+                value={service ? `${service.durationMin} min` : "—"}
+                readOnly
+              />
             </Field>
             <Field label="Prezzo">
-              <input className="nb-drawerInput" value={`€${service.price}`} readOnly />
+              <input
+                className="nb-drawerInput"
+                value={service ? `€${service.price}` : "—"}
+                readOnly
+              />
             </Field>
           </div>
 
@@ -160,12 +206,27 @@ export default function NewAppointmentDrawer() {
             />
           </Field>
 
-          <button type="submit" className="nb-newBtn nb-drawerSubmit">
+          <button type="submit" className="nb-newBtn nb-drawerSubmit" disabled={!canBook}>
             Prenota appuntamento
           </button>
         </form>
-      )}
-    </RightDrawer>
+      </RightDrawer>
+
+      <NewClientDrawer
+        open={clientDrawerOpen}
+        onClose={() => setClientDrawerOpen(false)}
+        onCreated={(id) => setNewApptClientId(id)}
+        layer={2}
+        escEnabled={!serviceDrawerOpen}
+      />
+
+      <NewServiceDrawer
+        open={serviceDrawerOpen}
+        onClose={() => setServiceDrawerOpen(false)}
+        onCreated={(id) => setServiceId(id)}
+        layer={3}
+      />
+    </>
   );
 }
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, shell } from "electron";
 import { join } from "path";
 import { fileURLToPath } from "url";
 
@@ -19,6 +19,18 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false
     }
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (
+      url.startsWith("https:") ||
+      url.startsWith("http:") ||
+      url.startsWith("mailto:") ||
+      url.startsWith("tel:")
+    ) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
   });
 
   const isDev = !app.isPackaged;

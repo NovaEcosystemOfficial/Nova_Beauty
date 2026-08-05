@@ -7,17 +7,32 @@ import ServicesWorkspace from "./ServicesWorkspace";
 import InventoryWorkspace from "./InventoryWorkspace";
 import SuppliersWorkspace from "./SuppliersWorkspace";
 import StudioWorkspace from "./StudioWorkspace";
-import SettingsWorkspace from "./SettingsWorkspace";
+import SettingsWorkspace, { type SettingsDeepLink } from "./SettingsWorkspace";
+import ReportsWorkspace from "./ReportsWorkspace";
 import WorkspacePlaceholder from "./WorkspacePlaceholder";
 import type { DesktopNavKey } from "./DesktopSidebar";
 
 type DesktopShellProps = {
   active: DesktopNavKey;
   onNavigate: (key: DesktopNavKey) => void;
+  onOpenAccount: () => void;
+  onOpenNotificationCenter: () => void;
+  settingsFocusToken: number;
+  settingsFocusSection: SettingsDeepLink;
   pageTitle: string;
 };
 
-function MainContent({ active, pageTitle }: { active: DesktopNavKey; pageTitle: string }) {
+function MainContent({
+  active,
+  pageTitle,
+  settingsFocusToken,
+  settingsFocusSection
+}: {
+  active: DesktopNavKey;
+  pageTitle: string;
+  settingsFocusToken: number;
+  settingsFocusSection: SettingsDeepLink;
+}) {
   switch (active) {
     case "dashboard":
       return <DemoDashboard />;
@@ -33,8 +48,12 @@ function MainContent({ active, pageTitle }: { active: DesktopNavKey; pageTitle: 
       return <SuppliersWorkspace />;
     case "studio":
       return <StudioWorkspace />;
+    case "reports":
+      return <ReportsWorkspace />;
     case "settings":
-      return <SettingsWorkspace />;
+      return (
+        <SettingsWorkspace focusToken={settingsFocusToken} focusSection={settingsFocusSection} />
+      );
     default:
       return (
         <WorkspacePlaceholder
@@ -45,7 +64,15 @@ function MainContent({ active, pageTitle }: { active: DesktopNavKey; pageTitle: 
   }
 }
 
-export default function DesktopShell({ active, onNavigate, pageTitle }: DesktopShellProps) {
+export default function DesktopShell({
+  active,
+  onNavigate,
+  onOpenAccount,
+  onOpenNotificationCenter,
+  settingsFocusToken,
+  settingsFocusSection,
+  pageTitle
+}: DesktopShellProps) {
   const isWorkspace =
     active === "clients" ||
     active === "agenda" ||
@@ -53,15 +80,26 @@ export default function DesktopShell({ active, onNavigate, pageTitle }: DesktopS
     active === "inventory" ||
     active === "suppliers" ||
     active === "studio" ||
+    active === "reports" ||
     active === "settings";
 
   return (
     <div className="nb-app">
       <DesktopSidebar active={active} onNavigate={onNavigate} />
       <div className="nb-mainColumn">
-        <DesktopHeader pageTitle={pageTitle} active={active} />
+        <DesktopHeader
+          pageTitle={pageTitle}
+          active={active}
+          onOpenAccount={onOpenAccount}
+          onOpenNotificationCenter={onOpenNotificationCenter}
+        />
         <main className={isWorkspace ? "nb-main nb-main--workspace" : "nb-main"}>
-          <MainContent active={active} pageTitle={pageTitle} />
+          <MainContent
+            active={active}
+            pageTitle={pageTitle}
+            settingsFocusToken={settingsFocusToken}
+            settingsFocusSection={settingsFocusSection}
+          />
         </main>
       </div>
     </div>

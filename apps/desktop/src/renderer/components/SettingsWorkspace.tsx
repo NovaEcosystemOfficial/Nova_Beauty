@@ -1,33 +1,42 @@
 import {
   ArrowLeft,
   Bell,
+  Building2,
   Check,
   Cloud,
-  CreditCard,
   Info,
   KeyRound,
-  Palette,
+  Orbit,
   PartyPopper,
   Plug,
   Rocket,
   Settings,
   Shield,
-  Sparkles,
-  UserRound
+  Sparkles
 } from "lucide-react";
 import clsx from "clsx";
-import { useCallback, useState, type ComponentType, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ComponentType, type ReactNode } from "react";
 import FounderCeremony from "./FounderCeremony";
+import NovaHub from "./NovaHub";
+import CentroAdmin from "./CentroAdmin";
+import BackupCenter from "./BackupCenter";
+import AppearanceCenter from "./AppearanceCenter";
+import NotificationCenter from "./NotificationCenter";
+import IntegrationsCenter from "./IntegrationsCenter";
+import InfoSupportCenter from "./InfoSupportCenter";
+import { startStripeCheckout } from "../utils/licenseBilling";
 
 type SettingsSection =
-  | "generale"
-  | "account"
+  | "centro"
   | "licenza"
+  | "nova"
   | "backup"
   | "aspetto"
   | "notifiche"
   | "integrazioni"
   | "informazioni";
+
+export type SettingsDeepLink = "centro" | "notifiche";
 
 type LicenseView = "status" | "plans" | "founder";
 
@@ -36,22 +45,34 @@ const SETTINGS_MENU: Array<{
   label: string;
   icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 }> = [
-  { id: "generale", label: "Generale", icon: Settings },
-  { id: "account", label: "Account", icon: UserRound },
+  { id: "centro", label: "Centro", icon: Building2 },
   { id: "licenza", label: "Licenza", icon: KeyRound },
+  { id: "nova", label: "Nova", icon: Orbit },
   { id: "backup", label: "Backup", icon: Cloud },
-  { id: "aspetto", label: "Aspetto", icon: Palette },
+  { id: "aspetto", label: "Studio Styles", icon: Sparkles },
   { id: "notifiche", label: "Notifiche", icon: Bell },
   { id: "integrazioni", label: "Integrazioni", icon: Plug },
   { id: "informazioni", label: "Informazioni", icon: Info }
 ];
 
-export default function SettingsWorkspace() {
-  const [section, setSection] = useState<SettingsSection>("licenza");
+export default function SettingsWorkspace({
+  focusToken = 0,
+  focusSection = "centro"
+}: {
+  focusToken?: number;
+  focusSection?: SettingsDeepLink;
+}) {
+  const [section, setSection] = useState<SettingsSection>("centro");
   const [licenseView, setLicenseView] = useState<LicenseView>("status");
   const [ceremonyActive, setCeremonyActive] = useState(false);
   const [isFounderDemo, setIsFounderDemo] = useState(false);
   const [founderSlots, setFounderSlots] = useState(83);
+
+  useEffect(() => {
+    if (focusToken <= 0) return;
+    setSection(focusSection);
+    setLicenseView("status");
+  }, [focusToken, focusSection]);
 
   const startCeremony = useCallback(() => {
     if (ceremonyActive) return;
@@ -122,9 +143,21 @@ export default function SettingsWorkspace() {
             ceremonyActive={ceremonyActive}
             onSimulateFounder={startCeremony}
           />
-        ) : (
-          <SettingsPlaceholder section={section} />
-        )}
+        ) : section === "nova" ? (
+          <NovaHub />
+        ) : section === "centro" ? (
+          <CentroAdmin />
+        ) : section === "backup" ? (
+          <BackupCenter />
+        ) : section === "aspetto" ? (
+          <AppearanceCenter />
+        ) : section === "notifiche" ? (
+          <NotificationCenter />
+        ) : section === "integrazioni" ? (
+          <IntegrationsCenter />
+        ) : section === "informazioni" ? (
+          <InfoSupportCenter />
+        ) : null}
       </section>
 
       {ceremonyActive ? (
@@ -290,6 +323,29 @@ function PlansView({
   isFounderDemo: boolean;
 }) {
   const barWidth = `${founderSlots}%`;
+  const [communityInfoOpen, setCommunityInfoOpen] = useState(false);
+  const [proStep, setProStep] = useState<null | 0 | 1 | 2>(null);
+  const [proBusy, setProBusy] = useState(false);
+  const [proDemoMsg, setProDemoMsg] = useState<string | null>(null);
+
+  const closePro = () => {
+    setProStep(null);
+    setProBusy(false);
+    setProDemoMsg(null);
+  };
+
+  const confirmProUpgrade = async () => {
+    setProBusy(true);
+    // TODO: integrazione Stripe / verifica licenza / attivazione / sync Nova
+    const result = await startStripeCheckout({
+      plan: "pro",
+      interval: "month",
+      amountEur: 15,
+      currency: "eur"
+    });
+    setProBusy(false);
+    setProDemoMsg(result.message);
+  };
 
   return (
     <div className="nb-lic">
@@ -321,7 +377,10 @@ function PlansView({
             "Aggiornamenti"
           ]}
           cta={!isFounderDemo ? "Piano attuale" : "Community"}
-          ctaDisabled
+          ctaDisabled={isFounderDemo || ceremonyActive}
+          onCta={
+            !isFounderDemo && !ceremonyActive ? () => setCommunityInfoOpen(true) : undefined
+          }
         />
 
         <PlanCard
@@ -338,7 +397,8 @@ function PlansView({
             "Tutte le funzioni future"
           ]}
           cta="Passa a Pro"
-          ctaDisabled
+          ctaDisabled={ceremonyActive}
+          onCta={ceremonyActive ? undefined : () => setProStep(0)}
         />
 
         <PlanCard
@@ -366,10 +426,118 @@ function PlansView({
             </div>
           }
           cta={isFounderDemo ? "Piano attuale" : "Diventa Founder"}
-          ctaDisabled={isFounderDemo}
-          onCta={isFounderDemo ? undefined : onFounder}
+          ctaDisabled={isFounderDemo || ceremonyActive}
+          onCta={isFounderDemo || ceremonyActive ? undefined : onFounder}
         />
       </div>
+
+      {communityInfoOpen ? (
+        <div className="nb-dialogRoot isOpen" role="presentation">
+          <button
+            type="button"
+            className="nb-dialogBackdrop"
+            aria-label="Chiudi"
+            onClick={() => setCommunityInfoOpen(false)}
+          />
+          <div className="nb-dialogCard" role="dialog" aria-modal="true" aria-label="Piano Community">
+            <h2 className="nb-dialogTitle">Community</h2>
+            <p className="nb-dialogSub">Stai già utilizzando questo piano.</p>
+            <div className="nb-dialogActions">
+              <button
+                type="button"
+                className="nb-newBtn"
+                onClick={() => setCommunityInfoOpen(false)}
+              >
+                Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {proStep !== null ? (
+        <div className="nb-dialogRoot isOpen" role="presentation">
+          <button type="button" className="nb-dialogBackdrop" aria-label="Chiudi" onClick={closePro} />
+          <div
+            className="nb-dialogCard nb-licUpgradeDialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Upgrade Pro"
+          >
+            <h2 className="nb-dialogTitle">Upgrade Pro</h2>
+            <p className="nb-dialogSub">
+              {proStep === 0
+                ? "Riepilogo funzionalità"
+                : proStep === 1
+                  ? "Prezzo"
+                  : "Conferma"}
+            </p>
+
+            {proStep === 0 ? (
+              <ul className="nb-licUpgradeList">
+                {[
+                  "Operatori illimitati",
+                  "Report avanzati",
+                  "Backup",
+                  "Analytics",
+                  "Integrazioni",
+                  "Tutte le funzioni future"
+                ].map((f) => (
+                  <li key={f}>
+                    <Check className="nb-licFeatureCheck" aria-hidden={true} />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {proStep === 1 ? (
+              <div className="nb-licUpgradePrice">
+                <div className="nb-licPlanPrice">15 €/mese</div>
+                <div className="nb-licPlanPriceNote">oppure 99 €/anno · IVA esclusa</div>
+              </div>
+            ) : null}
+
+            {proStep === 2 ? (
+              <div className="nb-licUpgradeConfirm">
+                <p className="nb-dialogSub">
+                  Confermi di voler passare al piano Pro? In produzione il pagamento verrà gestito
+                  da Stripe.
+                </p>
+                {proDemoMsg ? (
+                  <p className="nb-licUpgradeDemoMsg" role="status">
+                    {proDemoMsg}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="nb-dialogActions">
+              <button type="button" className="nb-ghostBtn" onClick={closePro} disabled={proBusy}>
+                {proDemoMsg ? "Chiudi" : "Annulla"}
+              </button>
+              {proStep < 2 ? (
+                <button
+                  type="button"
+                  className="nb-newBtn"
+                  onClick={() => setProStep((s) => (s === null ? 0 : ((s + 1) as 0 | 1 | 2)))}
+                >
+                  Continua
+                </button>
+              ) : proDemoMsg ? null : (
+                <button
+                  type="button"
+                  className="nb-newBtn"
+                  disabled={proBusy}
+                  onClick={() => void confirmProUpgrade()}
+                >
+                  {proBusy ? "Attendere…" : "Conferma"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -490,7 +658,7 @@ function PlanCard({
           highlight && "isPrimary",
           founder && !current && "isFounder"
         )}
-        disabled={ctaDisabled && !onCta}
+        disabled={Boolean(ctaDisabled) || !onCta}
         onClick={onCta}
       >
         {cta}
@@ -513,51 +681,6 @@ function QuickNote({ title, text }: { title: string; text: string }) {
     <div className="nb-licQuickNote">
       <div className="nb-licQuickNoteTitle">{title}</div>
       <p className="nb-licQuickNoteText">{text}</p>
-    </div>
-  );
-}
-
-function SettingsPlaceholder({ section }: { section: SettingsSection }) {
-  const copy: Record<Exclude<SettingsSection, "licenza">, { title: string; text: string }> = {
-    generale: {
-      title: "Generale",
-      text: "Lingua, formato data, densità UI e preferenze studio. Placeholder."
-    },
-    account: {
-      title: "Account",
-      text: "Profilo titolare, email e sicurezza. Nessuna autenticazione in questo sprint."
-    },
-    backup: {
-      title: "Backup",
-      text: "Esportazioni e ripristino. Funzione collegata al piano Pro in futuro."
-    },
-    aspetto: {
-      title: "Aspetto",
-      text: "Tema, accenti e layout. Placeholder UI."
-    },
-    notifiche: {
-      title: "Notifiche",
-      text: "Reminder, email e avvisi desktop. Placeholder UI."
-    },
-    integrazioni: {
-      title: "Integrazioni",
-      text: "WhatsApp, calendari e POS. Disponibili con Pro."
-    },
-    informazioni: {
-      title: "Informazioni",
-      text: "NovaBeauty Desktop · versione demo · License Center UI ready."
-    }
-  };
-
-  const item = copy[section as Exclude<SettingsSection, "licenza">];
-
-  return (
-    <div className="nb-setPlaceholder">
-      <div className="nb-setPlaceholderInner">
-        <CreditCard className="nb-setPlaceholderIcon" aria-hidden={true} />
-        <h2 className="nb-setPlaceholderTitle">{item.title}</h2>
-        <p className="nb-setPlaceholderText">{item.text}</p>
-      </div>
     </div>
   );
 }

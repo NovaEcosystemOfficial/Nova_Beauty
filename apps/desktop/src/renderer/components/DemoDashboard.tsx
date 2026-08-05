@@ -2,15 +2,14 @@ import {
   Activity,
   AlertTriangle,
   ArrowUpRight,
-  BarChart3,
   CalendarDays,
   Euro,
+  ImagePlus,
   PackageSearch,
-  Sparkles,
   Users
 } from "lucide-react";
 import clsx from "clsx";
-import type { ComponentType, ReactNode } from "react";
+import { useRef, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { useDemoWorkflow } from "../demo/DemoWorkflowContext";
 
 type Tone = "primary" | "gold" | "mint" | "lavender";
@@ -101,13 +100,36 @@ export default function DemoDashboard() {
     activities,
     appointments,
     inventoryScaledHint,
-    reportsPulse
+    studioName,
+    studioLogoUrl,
+    setStudioLogoUrl,
+    pushToast
   } = useDemoWorkflow();
+
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const todayAgenda = appointments
     .filter((a) => a.dayOffset === 0 && a.status !== "annullato")
     .sort((a, b) => a.startMin - b.startMin)
     .slice(0, 6);
+
+  const onPickLogo = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      pushToast("Seleziona un’immagine valida");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : null;
+      if (!result) return;
+      setStudioLogoUrl(result);
+      pushToast("Logo studio aggiornato");
+    };
+    reader.readAsDataURL(file);
+  };
 
   return (
     <div className="nb-dashboard">
@@ -212,26 +234,48 @@ export default function DemoDashboard() {
         </Panel>
       </div>
 
-      <section className={clsx("nb-analytics", reportsPulse && "isPulse")}>
-        <div className="nb-analyticsGlow" aria-hidden="true" />
-        <div className="nb-analyticsInner">
-          <span className="nb-analyticsIconWrap">
-            <BarChart3 className="nb-analyticsIcon" aria-hidden="true" />
-          </span>
-          <div className="nb-analyticsCopy">
-            <h2 className="nb-analyticsTitle">
-              {reportsPulse ? "Report aggiornati" : "Analytics in arrivo"}
-            </h2>
-            <p className="nb-analyticsText">
-              {reportsPulse
-                ? "Incassi, storico cliente e fidelity aggiornati dalla demo Completa."
-                : "Qui arriveranno report, trend e insight professionali per il tuo studio."}
+      <section className="nb-brandCenter" aria-label="Brand Center">
+        <div className="nb-brandCenterGlow" aria-hidden="true" />
+        <div className="nb-brandCenterInner">
+          <div className="nb-brandCenterMark">
+            {studioLogoUrl ? (
+              <img className="nb-brandCenterLogo" src={studioLogoUrl} alt={`Logo ${studioName}`} />
+            ) : (
+              <div className="nb-brandCenterPlaceholder">
+                <ImagePlus className="nb-brandCenterPlaceholderIcon" aria-hidden={true} />
+                <span>Nessun logo configurato</span>
+              </div>
+            )}
+          </div>
+
+          <div className="nb-brandCenterCopy">
+            <p className="nb-brandCenterEyebrow">Brand Center</p>
+            <h2 className="nb-brandCenterTitle">{studioName}</h2>
+            <p className="nb-brandCenterText">
+              Identità visiva ufficiale del centro · Dashboard, report, preventivi, fatture e
+              ecosistema Nova.
             </p>
           </div>
-          <span className="nb-analyticsTag">
-            <Sparkles className="nb-analyticsTagIcon" aria-hidden="true" />
-            {reportsPulse ? "Live demo" : "Placeholder"}
-          </span>
+
+          <div className="nb-brandCenterActions">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="nb-brandCenterFile"
+              aria-hidden={true}
+              tabIndex={-1}
+              onChange={onPickLogo}
+            />
+            <button
+              type="button"
+              className="nb-brandCenterBtn"
+              onClick={() => fileRef.current?.click()}
+            >
+              <ImagePlus className="nb-brandCenterBtnIcon" aria-hidden={true} />
+              {studioLogoUrl ? "Cambia logo" : "Carica logo"}
+            </button>
+          </div>
         </div>
       </section>
     </div>

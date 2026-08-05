@@ -19,6 +19,7 @@ import {
   type ApptStatus,
   type WorkflowAppointment
 } from "../demo/DemoWorkflowContext";
+import ClientSheetDrawer from "./ui/ClientSheetDrawer";
 
 type AgendaView = "giorno" | "settimana";
 type DemoAppointment = WorkflowAppointment;
@@ -27,6 +28,7 @@ const DAY_START = 8 * 60;
 const DAY_END = 20 * 60;
 const SLOT_MIN = 30;
 const SLOT_PX = 44;
+const BASE_DATE = new Date(2026, 7, 5); // mercoledì 5 agosto 2026
 
 const STATUS_LABEL: Record<ApptStatus, string> = {
   confermato: "Confermato",
@@ -35,15 +37,48 @@ const STATUS_LABEL: Record<ApptStatus, string> = {
   annullato: "Annullato"
 };
 
-const WEEK_DAYS = [
-  { offset: 0, label: "Mer 5", full: "Mercoledì 5" },
-  { offset: 1, label: "Gio 6", full: "Giovedì 6" },
-  { offset: 2, label: "Ven 7", full: "Venerdì 7" },
-  { offset: 3, label: "Sab 8", full: "Sabato 8" },
-  { offset: 4, label: "Dom 9", full: "Domenica 9" },
-  { offset: 5, label: "Lun 10", full: "Lunedì 10" },
-  { offset: 6, label: "Mar 11", full: "Martedì 11" }
+const IT_WEEKDAYS = [
+  "Domenica",
+  "Lunedì",
+  "Martedì",
+  "Mercoledì",
+  "Giovedì",
+  "Venerdì",
+  "Sabato"
 ];
+const IT_WEEKDAYS_SHORT = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
+const IT_MONTHS = [
+  "gennaio",
+  "febbraio",
+  "marzo",
+  "aprile",
+  "maggio",
+  "giugno",
+  "luglio",
+  "agosto",
+  "settembre",
+  "ottobre",
+  "novembre",
+  "dicembre"
+];
+
+function addDays(base: Date, offset: number): Date {
+  const d = new Date(base);
+  d.setDate(d.getDate() + offset);
+  return d;
+}
+
+function formatFullDate(d: Date): string {
+  return `${IT_WEEKDAYS[d.getDay()]} ${d.getDate()} ${IT_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function formatShortDay(d: Date): string {
+  return `${IT_WEEKDAYS_SHORT[d.getDay()]} ${d.getDate()}`;
+}
+
+function formatDayFull(d: Date): string {
+  return `${IT_WEEKDAYS[d.getDay()]} ${d.getDate()}`;
+}
 
 function formatTime(minFromMidnight: number): string {
   const h = Math.floor(minFromMidnight / 60);
@@ -67,6 +102,19 @@ function buildSlots(): string[] {
   return slots;
 }
 
+function phoneDigits(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+function waLink(phone: string): string {
+  const digits = phoneDigits(phone);
+  return `https://wa.me/${digits}`;
+}
+
+function telLink(phone: string): string {
+  return `tel:+${phoneDigits(phone)}`;
+}
+
 const TIME_SLOTS = buildSlots();
 const GRID_HEIGHT = ((DAY_END - DAY_START) / SLOT_MIN) * SLOT_PX;
 
@@ -77,20 +125,42 @@ function statusClass(status: ApptStatus): string {
 export default function AgendaWorkspace() {
   const {
     appointments: allAppointments,
-    openAppointmentDetail,
     openCompleteDialog,
-    detailApptId,
-    revenueCompleted,
-    appointmentsToday
+    openNewAppointment,
+    openAppointmentDetail,
+    getClient,
+    pushToast
   } = useDemoWorkflow();
 
   const [view, setView] = useState<AgendaView>("giorno");
+  const [focusOffset, setFocusOffset] = useState(0);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"tutti" | ApptStatus>("tutti");
   const [operatorFilter, setOperatorFilter] = useState("tutti");
   const [serviceFilter, setServiceFilter] = useState("tutti");
   const [selectedId, setSelectedId] = useState<string | null>("a1");
-  const [dateLabel] = useState("Mercoledì 5 agosto 2026");
+  const [clientSheetId, setClientSheetId] = useState<string | null>(null);
+  const [calendarKey, setCalendarKey] = useState(0);
+
+  const focusDate = useMemo(() => addDays(BASE_DATE, focusOffset), [focusOffset]);
+  const dateLabel = formatFullDate(focusDate);
+  const weekStart = Math.floor(focusOffset / 7) * 7;
+
+  const weekDays = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, i) => {
+        const offset = weekStart + i;
+        const date = addDays(BASE_DATE, offset);
+        return {
+          offset,
+          label: formatShortDay(date),
+          full: formatDayFull(date),
+          isToday: offset === 0,
+          isFocus: offset === focusOffset
+        };
+      }),
+    [weekStart, focusOffset]
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -98,7 +168,10 @@ export default function AgendaWorkspace() {
       if (statusFilter !== "tutti" && a.status !== statusFilter) return false;
       if (operatorFilter !== "tutti" && a.operator !== operatorFilter) return false;
       if (serviceFilter !== "tutti" && a.service !== serviceFilter) return false;
-      if (view === "giorno" && a.dayOffset !== 0) return false;
+      if (view === "giorno" && a.dayOffset !== focusOffset) return false;
+      if (view === "settimana") {
+        if (a.dayOffset < weekStart || a.dayOffset > weekStart + 6) return false;
+      }
       if (!q) return true;
       return (
         a.client.toLowerCase().includes(q) ||
@@ -106,40 +179,69 @@ export default function AgendaWorkspace() {
         a.phone.toLowerCase().includes(q)
       );
     });
-  }, [allAppointments, query, statusFilter, operatorFilter, serviceFilter, view]);
+  }, [
+    allAppointments,
+    query,
+    statusFilter,
+    operatorFilter,
+    serviceFilter,
+    view,
+    focusOffset,
+    weekStart
+  ]);
 
   const selected =
-    filtered.find((a) => a.id === (detailApptId ?? selectedId)) ??
     filtered.find((a) => a.id === selectedId) ??
+    allAppointments.find((a) => a.id === selectedId && a.dayOffset === focusOffset) ??
     filtered[0] ??
     null;
 
-  const todayStats = useMemo(() => {
-    const today = allAppointments.filter((a) => a.dayOffset === 0);
-    const confirmed = today.filter((a) => a.status === "confermato").length;
-    const pending = today.filter((a) => a.status === "da_confermare").length;
-    const cancelled = today.filter((a) => a.status === "annullato").length;
-    const expected = today
+  const dayStats = useMemo(() => {
+    const day = allAppointments.filter((a) => a.dayOffset === focusOffset);
+    const confirmed = day.filter((a) => a.status === "confermato").length;
+    const pending = day.filter((a) => a.status === "da_confermare").length;
+    const completed = day.filter((a) => a.status === "completato").length;
+    const cancelled = day.filter((a) => a.status === "annullato").length;
+    const expected = day
       .filter((a) => a.status !== "annullato")
       .reduce((s, a) => s + a.price, 0);
+    const done = day
+      .filter((a) => a.status === "completato")
+      .reduce((s, a) => s + a.price, 0);
     return {
-      count: appointmentsToday,
+      count: day.filter((a) => a.status !== "annullato").length,
       confirmed,
       pending,
+      completed,
       cancelled,
       expected: `€${expected}`,
-      done: `€${revenueCompleted}`
+      done: `€${done}`
     };
-  }, [allAppointments, appointmentsToday, revenueCompleted]);
+  }, [allAppointments, focusOffset]);
+
+  const shiftDate = (delta: number) => {
+    setFocusOffset((v) => v + delta);
+    setCalendarKey((k) => k + 1);
+  };
+
+  const goToday = () => {
+    setFocusOffset(0);
+    setCalendarKey((k) => k + 1);
+  };
+
+  const changeView = (next: AgendaView) => {
+    setView(next);
+    setCalendarKey((k) => k + 1);
+  };
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
-    openAppointmentDetail(id);
   };
+
+  const sheetClient = clientSheetId ? getClient(clientSheetId) ?? null : null;
 
   return (
     <div className="nb-agendaWs" role="region" aria-label="Workspace Agenda">
-      {/* Toolbar superiore agenda */}
       <div className="nb-agToolbar">
         <div className="nb-agSearch">
           <Search className="nb-agSearchIcon" aria-hidden={true} />
@@ -153,17 +255,33 @@ export default function AgendaWorkspace() {
         </div>
 
         <div className="nb-agDateNav" aria-label="Selettore data">
-          <button type="button" className="nb-agIconBtn" disabled aria-label="Giorno precedente">
+          <button
+            type="button"
+            className="nb-agIconBtn"
+            aria-label={view === "settimana" ? "Settimana precedente" : "Giorno precedente"}
+            onClick={() => shiftDate(view === "settimana" ? -7 : -1)}
+          >
             <ChevronLeft className="nb-agIcon" aria-hidden={true} />
           </button>
-          <button type="button" className="nb-agDateBtn" disabled>
+          <button type="button" className="nb-agDateBtn" onClick={goToday} title="Torna a oggi">
             <Clock className="nb-agDateIcon" aria-hidden={true} />
-            {dateLabel}
+            <span key={dateLabel} className="nb-agDateLabel">
+              {dateLabel}
+            </span>
           </button>
-          <button type="button" className="nb-agIconBtn" disabled aria-label="Giorno successivo">
+          <button
+            type="button"
+            className="nb-agIconBtn"
+            aria-label={view === "settimana" ? "Settimana successiva" : "Giorno successivo"}
+            onClick={() => shiftDate(view === "settimana" ? 7 : 1)}
+          >
             <ChevronRight className="nb-agIcon" aria-hidden={true} />
           </button>
-          <button type="button" className="nb-agTodayBtn" disabled>
+          <button
+            type="button"
+            className={clsx("nb-agTodayBtn", focusOffset === 0 && "isActive")}
+            onClick={goToday}
+          >
             Oggi
           </button>
         </div>
@@ -172,14 +290,14 @@ export default function AgendaWorkspace() {
           <button
             type="button"
             className={clsx("nb-agViewBtn", view === "giorno" && "isActive")}
-            onClick={() => setView("giorno")}
+            onClick={() => changeView("giorno")}
           >
             Giorno
           </button>
           <button
             type="button"
             className={clsx("nb-agViewBtn", view === "settimana" && "isActive")}
-            onClick={() => setView("settimana")}
+            onClick={() => changeView("settimana")}
           >
             Settimana
           </button>
@@ -232,34 +350,44 @@ export default function AgendaWorkspace() {
       </div>
 
       <div className="nb-agBody">
-        {/* Calendario centrale */}
         <section className="nb-agCalendar" aria-label="Griglia agenda">
-          {view === "giorno" ? (
-            <DayGrid
-              appointments={filtered}
-              selectedId={selected?.id ?? null}
-              onSelect={handleSelect}
-            />
-          ) : (
-            <WeekGrid
-              appointments={filtered}
-              selectedId={selected?.id ?? null}
-              onSelect={handleSelect}
-            />
-          )}
+          <div key={`${view}-${calendarKey}`} className="nb-agCalendarPane">
+            {view === "giorno" ? (
+              <DayGrid
+                appointments={filtered}
+                selectedId={selected?.id ?? null}
+                onSelect={handleSelect}
+                dateLabel={dateLabel}
+                isToday={focusOffset === 0}
+              />
+            ) : (
+              <WeekGrid
+                appointments={filtered}
+                selectedId={selected?.id ?? null}
+                onSelect={handleSelect}
+                weekDays={weekDays}
+                onSelectDay={(offset) => {
+                  setFocusOffset(offset);
+                  setView("giorno");
+                  setCalendarKey((k) => k + 1);
+                }}
+              />
+            )}
+          </div>
         </section>
 
-        {/* Pannello destro */}
         <aside className="nb-agAside">
           <div className="nb-agInspector">
             {selected ? (
               <AppointmentInspector
                 appointment={selected}
-                onOpenDetail={() => openAppointmentDetail(selected.id)}
+                onOpenClientSheet={() => setClientSheetId(selected.clientId)}
                 onComplete={() => {
                   openAppointmentDetail(selected.id);
                   openCompleteDialog();
                 }}
+                onNewAppointment={() => openNewAppointment(selected.clientId)}
+                onDelete={() => pushToast("Elimina · demo")}
               />
             ) : (
               <div className="nb-agInspectorEmpty">
@@ -269,18 +397,27 @@ export default function AgendaWorkspace() {
           </div>
 
           <div className="nb-agMiniDash" aria-label="Riepilogo giornaliero">
-            <div className="nb-agMiniDashTitle">Riepilogo oggi</div>
-            <div className="nb-agMiniDashGrid">
-              <MiniStat label="Appuntamenti" value={String(todayStats.count)} />
-              <MiniStat label="Incasso previsto" value={todayStats.expected} />
-              <MiniStat label="Incasso completato" value={todayStats.done} />
-              <MiniStat label="Confermati" value={String(todayStats.confirmed)} tone="mint" />
-              <MiniStat label="Da confermare" value={String(todayStats.pending)} tone="gold" />
-              <MiniStat label="Annullati" value={String(todayStats.cancelled)} tone="danger" />
+            <div className="nb-agMiniDashTitle">
+              {focusOffset === 0 ? "Riepilogo oggi" : "Riepilogo giorno"}
+            </div>
+            <div className="nb-agMiniDashGrid" key={`stats-${focusOffset}-${dayStats.completed}`}>
+              <MiniStat label="Appuntamenti" value={String(dayStats.count)} />
+              <MiniStat label="Incasso previsto" value={dayStats.expected} />
+              <MiniStat label="Incasso completato" value={dayStats.done} />
+              <MiniStat label="Confermati" value={String(dayStats.confirmed)} tone="mint" />
+              <MiniStat label="Da confermare" value={String(dayStats.pending)} tone="gold" />
+              <MiniStat label="Annullati" value={String(dayStats.cancelled)} tone="danger" />
             </div>
           </div>
         </aside>
       </div>
+
+      <ClientSheetDrawer
+        open={Boolean(clientSheetId)}
+        client={sheetClient}
+        appointments={allAppointments}
+        onClose={() => setClientSheetId(null)}
+      />
     </div>
   );
 }
@@ -345,7 +482,14 @@ function AppointmentCard({
           <span>
             {start}–{end}
           </span>
-          <span className={clsx("nb-agApptStatus", statusClass(appt.status))}>
+          <span
+            key={`${appt.id}-${appt.status}`}
+            className={clsx(
+              "nb-agApptStatus",
+              statusClass(appt.status),
+              appt.justCompleted && "isFlip"
+            )}
+          >
             {STATUS_LABEL[appt.status]}
           </span>
         </span>
@@ -357,19 +501,25 @@ function AppointmentCard({
 function DayGrid({
   appointments,
   selectedId,
-  onSelect
+  onSelect,
+  dateLabel,
+  isToday
 }: {
   appointments: DemoAppointment[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  dateLabel: string;
+  isToday: boolean;
 }) {
   return (
     <div className="nb-agDay">
       <div className="nb-agDayHead">
         <div className="nb-agTimeGutterHead" />
         <div className="nb-agDayHeadLabel">
-          <span className="nb-agDayHeadTitle">Cabina / Studio</span>
-          <span className="nb-agDayHeadSub">Vista giorno · demo</span>
+          <span className="nb-agDayHeadTitle">{dateLabel}</span>
+          <span className="nb-agDayHeadSub">
+            {isToday ? "Vista giorno · oggi" : "Vista giorno"}
+          </span>
         </div>
       </div>
       <div className="nb-agDayScroll">
@@ -381,11 +531,7 @@ function DayGrid({
               </div>
             ))}
           </div>
-          <div
-            className="nb-agLane"
-            data-drop-zone="true"
-            style={{ height: GRID_HEIGHT }}
-          >
+          <div className="nb-agLane" data-drop-zone="true" style={{ height: GRID_HEIGHT }}>
             {TIME_SLOTS.map((slot) => (
               <div
                 key={slot}
@@ -411,21 +557,40 @@ function DayGrid({
 function WeekGrid({
   appointments,
   selectedId,
-  onSelect
+  onSelect,
+  weekDays,
+  onSelectDay
 }: {
   appointments: DemoAppointment[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  weekDays: Array<{
+    offset: number;
+    label: string;
+    full: string;
+    isToday: boolean;
+    isFocus: boolean;
+  }>;
+  onSelectDay: (offset: number) => void;
 }) {
   return (
     <div className="nb-agWeek">
       <div className="nb-agWeekHead">
         <div className="nb-agTimeGutterHead" />
-        {WEEK_DAYS.map((d) => (
-          <div key={d.offset} className={clsx("nb-agWeekDayHead", d.offset === 0 && "isToday")}>
+        {weekDays.map((d) => (
+          <button
+            key={d.offset}
+            type="button"
+            className={clsx(
+              "nb-agWeekDayHead",
+              d.isToday && "isToday",
+              d.isFocus && "isFocus"
+            )}
+            onClick={() => onSelectDay(d.offset)}
+          >
             <span className="nb-agWeekDayLabel">{d.label}</span>
             <span className="nb-agWeekDayFull">{d.full}</span>
-          </div>
+          </button>
         ))}
       </div>
       <div className="nb-agWeekScroll">
@@ -437,7 +602,7 @@ function WeekGrid({
               </div>
             ))}
           </div>
-          {WEEK_DAYS.map((d) => (
+          {weekDays.map((d) => (
             <div
               key={d.offset}
               className="nb-agLane nb-agWeekLane"
@@ -473,15 +638,26 @@ function WeekGrid({
 
 function AppointmentInspector({
   appointment,
-  onOpenDetail,
-  onComplete
+  onOpenClientSheet,
+  onComplete,
+  onNewAppointment,
+  onDelete
 }: {
   appointment: DemoAppointment;
-  onOpenDetail: () => void;
+  onOpenClientSheet: () => void;
   onComplete: () => void;
+  onNewAppointment: () => void;
+  onDelete: () => void;
 }) {
   const start = apptStartClock(appointment.startMin);
   const end = apptEndClock(appointment.startMin, appointment.durationMin);
+  const [completePulse, setCompletePulse] = useState(false);
+
+  const handleComplete = () => {
+    setCompletePulse(true);
+    window.setTimeout(() => setCompletePulse(false), 420);
+    onComplete();
+  };
 
   return (
     <>
@@ -496,7 +672,14 @@ function AppointmentInspector({
         <div className="nb-agInspTitleBlock">
           <h2 className="nb-agInspName">{appointment.client}</h2>
           <p className="nb-agInspService">{appointment.service}</p>
-          <span className={clsx("nb-agApptStatus", statusClass(appointment.status))}>
+          <span
+            key={`${appointment.id}-${appointment.status}`}
+            className={clsx(
+              "nb-agApptStatus",
+              statusClass(appointment.status),
+              (appointment.justCompleted || completePulse) && "isFlip"
+            )}
+          >
             {STATUS_LABEL[appointment.status]}
           </span>
         </div>
@@ -507,8 +690,6 @@ function AppointmentInspector({
         <Field label="Ora" value={`${start} – ${end}`} />
         <Field label="Operatore" value={appointment.operator} />
         <Field label="Cabina" value={appointment.cabin} />
-        <Field label="Telefono" value={appointment.phone} />
-        <Field label="Email" value={appointment.email} />
       </div>
 
       <div className="nb-agInspBlock">
@@ -522,39 +703,57 @@ function AppointmentInspector({
       </div>
 
       <div className="nb-agInspContacts">
-        <button type="button" className="nb-agContactBtn" disabled>
+        <a
+          className="nb-agContactBtn"
+          href={telLink(appointment.phone)}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Chiama ${appointment.client}`}
+        >
           <Phone className="nb-agContactIcon" aria-hidden={true} />
           Telefono
-        </button>
-        <button type="button" className="nb-agContactBtn" disabled>
+        </a>
+        <a
+          className="nb-agContactBtn"
+          href={waLink(appointment.phone)}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`WhatsApp ${appointment.client}`}
+        >
           <MessageSquare className="nb-agContactIcon" aria-hidden={true} />
           WhatsApp
-        </button>
-        <button type="button" className="nb-agContactBtn" disabled>
+        </a>
+        <a
+          className="nb-agContactBtn"
+          href={`mailto:${appointment.email}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Email ${appointment.client}`}
+        >
           <Mail className="nb-agContactIcon" aria-hidden={true} />
           Email
-        </button>
+        </a>
       </div>
 
       <div className="nb-agInspActions">
-        <button type="button" className="nb-agActionBtn" onClick={onOpenDetail}>
+        <button type="button" className="nb-agActionBtn" onClick={onOpenClientSheet}>
           <Pencil className="nb-agActionIcon" aria-hidden={true} />
           Scheda
         </button>
         <button
           type="button"
-          className="nb-agActionBtn mint"
-          disabled={appointment.status === "completato"}
-          onClick={onComplete}
+          className={clsx("nb-agActionBtn mint", completePulse && "isPulseClick")}
+          disabled={appointment.status === "completato" || appointment.status === "annullato"}
+          onClick={handleComplete}
         >
           <Check className="nb-agActionIcon" aria-hidden={true} />
           Completa
         </button>
-        <button type="button" className="nb-agActionBtn danger" disabled>
+        <button type="button" className="nb-agActionBtn danger" onClick={onDelete}>
           <Trash2 className="nb-agActionIcon" aria-hidden={true} />
           Elimina
         </button>
-        <button type="button" className="nb-agActionBtn primary" disabled>
+        <button type="button" className="nb-agActionBtn primary" onClick={onNewAppointment}>
           <CalendarPlus className="nb-agActionIcon" aria-hidden={true} />
           Nuovo appuntamento
         </button>
@@ -562,7 +761,7 @@ function AppointmentInspector({
 
       <div className="nb-agInspHint">
         <User className="nb-agInspHintIcon" aria-hidden={true} />
-        Workflow demo — click card apre drawer destro
+        Seleziona una card per ispezionare l&apos;appuntamento
       </div>
     </>
   );

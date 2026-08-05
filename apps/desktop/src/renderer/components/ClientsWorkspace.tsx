@@ -1,20 +1,34 @@
 import {
   Calendar,
-  CalendarPlus,
   Camera,
   Gift,
   Mail,
   MessageSquare,
   Phone,
   Search,
+  Sparkles,
   Star,
   StickyNote
 } from "lucide-react";
 import clsx from "clsx";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDemoWorkflow, type WorkflowClient } from "../demo/DemoWorkflowContext";
 
 type ListFilter = "tutti" | "preferiti" | "attivi" | "nuovi";
+
+const PHOTO_DIARY_SLOTS = [
+  { id: "before", label: "Prima trattamento", kind: "photo" as const },
+  { id: "after", label: "Dopo trattamento", kind: "photo" as const },
+  { id: "zones", label: "Zone trattate", kind: "zones" as const },
+  { id: "followup", label: "Follow-up programmato", kind: "followup" as const }
+] as const;
+
+const EVOLUTION_DEMO: Array<{ id: string; label: string; meta: string }> = [
+  { id: "ev1", label: "Prima visita", meta: "Scheda iniziale · trattamento base" },
+  { id: "ev2", label: "2 settimane", meta: "Controllo · note e foto" },
+  { id: "ev3", label: "1 mese", meta: "Verifica risultato · follow-up" },
+  { id: "ev4", label: "3 mesi", meta: "Mantieni · nuovo ciclo" }
+];
 
 function statusLabel(status: WorkflowClient["status"]): string {
   switch (status) {
@@ -36,11 +50,34 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
+function phoneDigits(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+function telHref(phone: string): string {
+  return `tel:+${phoneDigits(phone)}`;
+}
+
+function waHref(phone: string): string {
+  return `https://wa.me/${phoneDigits(phone)}`;
+}
+
 export default function ClientsWorkspace() {
-  const { clients, appointments, openNewAppointment } = useDemoWorkflow();
+  const { clients, appointments, pushToast, lastCreatedClientId, clearLastCreatedClientId } =
+    useDemoWorkflow();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ListFilter>("tutti");
   const [selectedId, setSelectedId] = useState(clients[0]?.id ?? "c1");
+  const [activeSlot, setActiveSlot] = useState<string | null>(null);
+  const [activeEvolution, setActiveEvolution] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!lastCreatedClientId) return;
+    setSelectedId(lastCreatedClientId);
+    setFilter("tutti");
+    setQuery("");
+    clearLastCreatedClientId();
+  }, [lastCreatedClientId, clearLastCreatedClientId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -62,6 +99,23 @@ export default function ClientsWorkspace() {
   const futureAppts = appointments.filter(
     (a) => a.clientId === selected.id && a.status !== "completato" && a.status !== "annullato"
   );
+
+  const phone = selected.phone.trim();
+  const email = selected.email.trim();
+
+  const onDiarySlot = (slotId: string, kind: "photo" | "zones" | "followup") => {
+    setActiveSlot(`${selected.id}:${slotId}`);
+    window.setTimeout(() => setActiveSlot(null), 420);
+    if (kind === "zones") {
+      pushToast("Zone trattate · mappa corpo in arrivo");
+      return;
+    }
+    if (kind === "followup") {
+      pushToast("Follow-up programmato · reminder in arrivo");
+      return;
+    }
+    pushToast("Diario fotografico · sync Staff in arrivo");
+  };
 
   return (
     <div className="nb-clientsWs" role="region" aria-label="Workspace Clienti">
@@ -98,7 +152,7 @@ export default function ClientsWorkspace() {
           </div>
           <div className="nb-cwListMeta">
             <span>{filtered.length} clienti</span>
-            <span className="nb-cwListMetaHint">Workflow demo</span>
+            <span className="nb-cwListMetaHint">Cartella digitale</span>
           </div>
         </div>
 
@@ -136,7 +190,11 @@ export default function ClientsWorkspace() {
         </ul>
       </aside>
 
-      <section className="nb-cwDetail nb-cwDetailRich" aria-label={`Scheda ${selected.name}`}>
+      <section
+        className="nb-cwDetail nb-cwDetailRich"
+        aria-label={`Scheda ${selected.name}`}
+        key={selected.id}
+      >
         <div className="nb-cwDetailHead">
           <div className="nb-cwDetailIdentity">
             <div className="nb-cwDetailAvatar" aria-hidden={true}>
@@ -158,25 +216,16 @@ export default function ClientsWorkspace() {
               </div>
             </div>
           </div>
-
-          <button
-            type="button"
-            className="nb-newBtn nb-cwNewAppt"
-            onClick={() => openNewAppointment(selected.id)}
-          >
-            <CalendarPlus className="nb-newBtnIcon" aria-hidden={true} />
-            Nuovo appuntamento
-          </button>
         </div>
 
         <div className="nb-cwDetailGrid">
           <div className="nb-cwField">
             <span className="nb-cwFieldLabel">Telefono</span>
-            <span className="nb-cwFieldValue">{selected.phone}</span>
+            <span className="nb-cwFieldValue">{phone || "—"}</span>
           </div>
           <div className="nb-cwField">
             <span className="nb-cwFieldLabel">Email</span>
-            <span className="nb-cwFieldValue">{selected.email}</span>
+            <span className="nb-cwFieldValue">{email || "—"}</span>
           </div>
           <div className="nb-cwField">
             <span className="nb-cwFieldLabel">Compleanno</span>
@@ -184,7 +233,7 @@ export default function ClientsWorkspace() {
           </div>
           <div className="nb-cwField">
             <span className="nb-cwFieldLabel">Ultimo trattamento</span>
-            <span className="nb-cwFieldValue">{selected.lastTreatment}</span>
+            <span className="nb-cwFieldValue">{selected.lastTreatment || "—"}</span>
           </div>
           <div className="nb-cwField">
             <span className="nb-cwFieldLabel">Totale speso</span>
@@ -201,23 +250,45 @@ export default function ClientsWorkspace() {
             <StickyNote className="nb-cwNotesIcon" aria-hidden={true} />
             <span>Note</span>
           </div>
-          <p className="nb-cwNotesBody">{selected.notes}</p>
+          <p className="nb-cwNotesBody">{selected.notes || "Nessuna nota."}</p>
         </div>
 
         <div className="nb-cwExtraRow">
-          <div className="nb-cwBlock">
+          <div className="nb-cwBlock nb-cwDiaryBlock">
             <div className="nb-cwBlockHead">
               <Camera className="nb-cwBlockIcon" aria-hidden={true} />
-              Ultime foto diario
+              Diario Fotografico
             </div>
-            <div className="nb-cwPhotoPlaceholders">
-              {(selected.diaryPlaceholders.length
-                ? selected.diaryPlaceholders
-                : ["Nessuna foto"]
-              ).map((p) => (
-                <div key={p} className="nb-cwPhotoPh">
-                  {p}
-                </div>
+            <p className="nb-cwDiaryHint">
+              Diario personale · cliente <strong>{selected.id}</strong> · sync Staff
+            </p>
+            <div
+              className="nb-cwPhotoPlaceholders nb-cwPhotoDiary"
+              data-client-id={selected.id}
+              aria-label={`Diario fotografico di ${selected.name}`}
+            >
+              {PHOTO_DIARY_SLOTS.map((slot) => (
+                <button
+                  key={`${selected.id}-${slot.id}`}
+                  type="button"
+                  className={clsx(
+                    "nb-cwPhotoPh",
+                    "isClickable",
+                    activeSlot === `${selected.id}:${slot.id}` && "isPulse"
+                  )}
+                  data-client-id={selected.id}
+                  data-slot={slot.id}
+                  onClick={() => onDiarySlot(slot.id, slot.kind)}
+                >
+                  <span className="nb-cwPhotoPhLabel">{slot.label}</span>
+                  <span className="nb-cwPhotoPhSub">
+                    {slot.kind === "zones"
+                      ? "Apri mappa"
+                      : slot.kind === "followup"
+                        ? "Programma"
+                        : "In attesa foto"}
+                  </span>
+                </button>
               ))}
             </div>
           </div>
@@ -229,9 +300,49 @@ export default function ClientsWorkspace() {
             </div>
             <p className="nb-cwBlockText">
               {selected.fidelityPoints} punti · livello{" "}
-              {selected.fidelityPoints >= 200 ? "Gold" : selected.fidelityPoints >= 80 ? "Silver" : "Starter"}
+              {selected.fidelityPoints >= 200
+                ? "Gold"
+                : selected.fidelityPoints >= 80
+                  ? "Silver"
+                  : "Starter"}
             </p>
           </div>
+        </div>
+
+        <div className="nb-cwBlock nb-cwEvolution">
+          <div className="nb-cwBlockHead">
+            <Sparkles className="nb-cwBlockIcon" aria-hidden={true} />
+            Evoluzione
+          </div>
+          <ol className="nb-cwEvoList" aria-label={`Evoluzione di ${selected.name}`}>
+            {EVOLUTION_DEMO.map((step, idx) => (
+              <li key={`${selected.id}-${step.id}`}>
+                <button
+                  type="button"
+                  className={clsx(
+                    "nb-cwEvoItem",
+                    activeEvolution === `${selected.id}:${step.id}` && "isPulse"
+                  )}
+                  onClick={() => {
+                    setActiveEvolution(`${selected.id}:${step.id}`);
+                    window.setTimeout(() => setActiveEvolution(null), 420);
+                    pushToast(`${step.label} · demo`);
+                  }}
+                >
+                  <span className="nb-cwEvoRail" aria-hidden={true}>
+                    <span className="nb-cwEvoDot" />
+                    {idx < EVOLUTION_DEMO.length - 1 ? <span className="nb-cwEvoLine" /> : null}
+                  </span>
+                  <span className="nb-cwEvoCopy">
+                    <span className="nb-cwEvoLabel">{step.label}</span>
+                    <span className="nb-cwEvoMeta">
+                      {step.meta} · {selected.lastTreatment || "trattamento"}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
         </div>
 
         <div className="nb-cwBlock">
@@ -258,18 +369,59 @@ export default function ClientsWorkspace() {
         </div>
 
         <div className="nb-cwQuickActions">
-          <button type="button" className="nb-cwQuick" disabled>
-            <Phone className="nb-cwQuickIcon" aria-hidden={true} />
-            Chiama
-          </button>
-          <button type="button" className="nb-cwQuick" disabled>
-            <Mail className="nb-cwQuickIcon" aria-hidden={true} />
-            Email
-          </button>
-          <button type="button" className="nb-cwQuick" disabled>
-            <MessageSquare className="nb-cwQuickIcon" aria-hidden={true} />
-            WhatsApp
-          </button>
+          {phone ? (
+            <a
+              className="nb-cwQuick"
+              href={telHref(phone)}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Chiama ${selected.name}`}
+            >
+              <Phone className="nb-cwQuickIcon" aria-hidden={true} />
+              Chiama
+            </a>
+          ) : (
+            <span className="nb-cwQuick isMissing" role="status">
+              <Phone className="nb-cwQuickIcon" aria-hidden={true} />
+              Nessun numero disponibile
+            </span>
+          )}
+
+          {email ? (
+            <a
+              className="nb-cwQuick"
+              href={`mailto:${email}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Email ${selected.name}`}
+            >
+              <Mail className="nb-cwQuickIcon" aria-hidden={true} />
+              Email
+            </a>
+          ) : (
+            <span className="nb-cwQuick isMissing" role="status">
+              <Mail className="nb-cwQuickIcon" aria-hidden={true} />
+              Nessuna email disponibile
+            </span>
+          )}
+
+          {phone ? (
+            <a
+              className="nb-cwQuick"
+              href={waHref(phone)}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`WhatsApp ${selected.name}`}
+            >
+              <MessageSquare className="nb-cwQuickIcon" aria-hidden={true} />
+              WhatsApp
+            </a>
+          ) : (
+            <span className="nb-cwQuick isMissing" role="status">
+              <MessageSquare className="nb-cwQuickIcon" aria-hidden={true} />
+              Nessun numero disponibile
+            </span>
+          )}
         </div>
       </section>
 

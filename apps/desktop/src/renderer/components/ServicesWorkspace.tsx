@@ -4,6 +4,7 @@ import {
   Copy,
   Download,
   Euro,
+  Eye,
   EyeOff,
   Pencil,
   Plus,
@@ -15,6 +16,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useMemo, useState } from "react";
+import { useDemoWorkflow } from "../demo/DemoWorkflowContext";
+import NewServiceWizard, { type ServiceWizardResult } from "./ui/NewServiceWizard";
 
 type ServiceCategory =
   | "Viso"
@@ -42,6 +45,7 @@ type DemoService = {
   lastEdited: string;
   tone: CategoryTone;
   soldCount: number;
+  cabin?: string;
 };
 
 const CATEGORIES: Array<"Tutti" | ServiceCategory> = [
@@ -69,7 +73,7 @@ const CATEGORY_TONE: Record<ServiceCategory, CategoryTone> = {
   Pacchetti: "gold"
 };
 
-const DEMO_SERVICES: DemoService[] = [
+const INITIAL_SERVICES: DemoService[] = [
   {
     id: "s1",
     name: "Pulizia viso deep",
@@ -82,7 +86,8 @@ const DEMO_SERVICES: DemoService[] = [
     operators: ["Fabio", "Laura"],
     lastEdited: "2 ago 2026",
     tone: "primary",
-    soldCount: 48
+    soldCount: 48,
+    cabin: "Cabina 1"
   },
   {
     id: "s2",
@@ -245,6 +250,8 @@ type DurationFilter = "tutti" | "breve" | "media" | "lunga";
 type PriceFilter = "tutti" | "low" | "mid" | "high";
 type ActiveFilter = "tutti" | "attivo" | "disattivo";
 
+type ConfirmKind = "duplicate" | "toggle" | "delete" | null;
+
 function formatPrice(n: number): string {
   return `€${n}`;
 }
@@ -256,7 +263,17 @@ function formatDuration(min: number): string {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
+function todayLabel(): string {
+  return "5 ago 2026";
+}
+
+function asCategory(value: string): ServiceCategory {
+  return (CATEGORIES.includes(value as ServiceCategory) ? value : "Viso") as ServiceCategory;
+}
+
 export default function ServicesWorkspace() {
+  const { pushToast, createService } = useDemoWorkflow();
+  const [services, setServices] = useState(INITIAL_SERVICES);
   const [category, setCategory] = useState<"Tutti" | ServiceCategory>("Tutti");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("nome");
@@ -264,19 +281,28 @@ export default function ServicesWorkspace() {
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("tutti");
   const [operatorFilter, setOperatorFilter] = useState("tutti");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("tutti");
-  const [selectedId, setSelectedId] = useState(DEMO_SERVICES[0].id);
+  const [selectedId, setSelectedId] = useState(INITIAL_SERVICES[0].id);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [confirmKind, setConfirmKind] = useState<ConfirmKind>(null);
+  const [editDraft, setEditDraft] = useState({
+    name: "",
+    durationMin: 45,
+    price: 50,
+    description: ""
+  });
 
   const categoryCounts = useMemo(() => {
-    const map: Record<string, number> = { Tutti: DEMO_SERVICES.length };
+    const map: Record<string, number> = { Tutti: services.length };
     for (const c of CATEGORIES.slice(1)) {
-      map[c] = DEMO_SERVICES.filter((s) => s.category === c).length;
+      map[c] = services.filter((s) => s.category === c).length;
     }
     return map;
-  }, []);
+  }, [services]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let list = DEMO_SERVICES.filter((s) => {
+    let list = services.filter((s) => {
       if (category !== "Tutti" && s.category !== category) return false;
       if (activeFilter === "attivo" && !s.active) return false;
       if (activeFilter === "disattivo" && s.active) return false;
@@ -309,30 +335,169 @@ export default function ServicesWorkspace() {
     });
 
     return list;
-  }, [category, query, sort, durationFilter, priceFilter, operatorFilter, activeFilter]);
+  }, [services, category, query, sort, durationFilter, priceFilter, operatorFilter, activeFilter]);
 
-  const selected = filtered.find((s) => s.id === selectedId) ?? filtered[0] ?? DEMO_SERVICES[0];
+  const selected =
+    services.find((s) => s.id === selectedId) ??
+    filtered.find((s) => s.id === selectedId) ??
+    filtered[0] ??
+    services[0];
 
   const stats = useMemo(() => {
-    const active = DEMO_SERVICES.filter((s) => s.active);
-    const top = [...DEMO_SERVICES].sort((a, b) => b.soldCount - a.soldCount)[0];
-    const avgDur = Math.round(
-      DEMO_SERVICES.reduce((sum, s) => sum + s.durationMin, 0) / DEMO_SERVICES.length
-    );
-    const avgPrice = Math.round(
-      DEMO_SERVICES.reduce((sum, s) => sum + s.price, 0) / DEMO_SERVICES.length
-    );
+    if (services.length === 0) {
+      return { active: 0, top: "—", avgDur: "—", avgPrice: "—" };
+    }
+    const active = services.filter((s) => s.active);
+    const top = [...services].sort((a, b) => b.soldCount - a.soldCount)[0];
+    const avgDur = Math.round(services.reduce((sum, s) => sum + s.durationMin, 0) / services.length);
+    const avgPrice = Math.round(services.reduce((sum, s) => sum + s.price, 0) / services.length);
     return {
       active: active.length,
       top: top.name,
       avgDur: formatDuration(avgDur),
       avgPrice: formatPrice(avgPrice)
     };
-  }, []);
+  }, [services]);
+
+  const duplicateService = (source: DemoService) => {
+    const id = `s-${Date.now()}`;
+    const copy: DemoService = {
+      ...source,
+      id,
+      name: `${source.name} (copia)`,
+      lastEdited: todayLabel(),
+      soldCount: 0,
+      active: true
+    };
+    setServices((prev) => [copy, ...prev]);
+    setSelectedId(id);
+    pushToast("Servizio duplicato");
+  };
+
+  const handleWizardCreate = (result: ServiceWizardResult) => {
+    const cat = asCategory(result.category);
+    const id = `s-${Date.now()}`;
+    const products = result.products
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const service: DemoService = {
+      id,
+      name: result.name.trim(),
+      category: cat,
+      durationMin: result.durationMin,
+      price: result.price,
+      active: true,
+      description: result.description.trim() || "Descrizione demo.",
+      products: products.length ? products : ["—"],
+      operators: result.operators.length ? result.operators : ["Fabio"],
+      lastEdited: todayLabel(),
+      tone: CATEGORY_TONE[cat],
+      soldCount: 0,
+      cabin: result.cabin
+    };
+    setServices((prev) => [service, ...prev]);
+    setSelectedId(id);
+    createService({
+      category: cat,
+      name: service.name,
+      durationMin: service.durationMin,
+      price: service.price,
+      products: products.join(", "),
+      operators: service.operators,
+      color: "#c45c6a"
+    });
+  };
+
+  const openEdit = () => {
+    if (!selected) return;
+    setEditDraft({
+      name: selected.name,
+      durationMin: selected.durationMin,
+      price: selected.price,
+      description: selected.description
+    });
+    setEditOpen(true);
+  };
+
+  const saveEdit = () => {
+    if (!selected) return;
+    setServices((prev) =>
+      prev.map((s) =>
+        s.id === selected.id
+          ? {
+              ...s,
+              name: editDraft.name.trim() || s.name,
+              durationMin: editDraft.durationMin,
+              price: editDraft.price,
+              description: editDraft.description.trim(),
+              lastEdited: todayLabel()
+            }
+          : s
+      )
+    );
+    setEditOpen(false);
+    pushToast("Servizio aggiornato");
+  };
+
+  const runConfirm = () => {
+    if (!selected || !confirmKind) return;
+    if (confirmKind === "duplicate") {
+      duplicateService(selected);
+    } else if (confirmKind === "toggle") {
+      setServices((prev) =>
+        prev.map((s) =>
+          s.id === selected.id
+            ? { ...s, active: !s.active, lastEdited: todayLabel() }
+            : s
+        )
+      );
+      pushToast(selected.active ? "Servizio disattivato" : "Servizio riattivato");
+    } else if (confirmKind === "delete") {
+      const removedId = selected.id;
+      setServices((prev) => {
+        const next = prev.filter((s) => s.id !== removedId);
+        setSelectedId(next[0]?.id ?? "");
+        return next;
+      });
+      pushToast("Servizio eliminato");
+    }
+    setConfirmKind(null);
+  };
+
+  if (!selected) {
+    return (
+      <div className="nb-servicesWs" role="region" aria-label="Workspace Servizi">
+        <p className="nb-svEmpty">Nessun servizio nel catalogo.</p>
+      </div>
+    );
+  }
+
+  const confirmCopy =
+    confirmKind === "duplicate"
+      ? {
+          title: "Duplicare questo servizio?",
+          sub: `Verrà creata una copia di “${selected.name}”.`,
+          confirm: "Duplica"
+        }
+      : confirmKind === "toggle"
+        ? {
+            title: selected.active ? "Disattivare il servizio?" : "Riattivare il servizio?",
+            sub: selected.active
+              ? `“${selected.name}” non sarà più prenotabile.`
+              : `“${selected.name}” tornerà attivo nel listino.`,
+            confirm: selected.active ? "Disattiva" : "Riattiva"
+          }
+        : confirmKind === "delete"
+          ? {
+              title: "Eliminare il servizio?",
+              sub: `“${selected.name}” verrà rimosso dal catalogo demo.`,
+              confirm: "Elimina"
+            }
+          : null;
 
   return (
     <div className="nb-servicesWs" role="region" aria-label="Workspace Servizi">
-      {/* SINISTRA — categorie */}
       <aside className="nb-svCats">
         <div className="nb-svCatsHead">
           <Scissors className="nb-svCatsIcon" aria-hidden={true} />
@@ -361,7 +526,6 @@ export default function ServicesWorkspace() {
         </nav>
       </aside>
 
-      {/* CENTRO — lista */}
       <section className="nb-svMain">
         <div className="nb-svToolbar">
           <div className="nb-svSearch">
@@ -445,19 +609,31 @@ export default function ServicesWorkspace() {
           </div>
 
           <div className="nb-svQuickActions">
-            <button type="button" className="nb-ghostBtn nb-svGhost" disabled>
+            <button
+              type="button"
+              className="nb-ghostBtn nb-svGhost"
+              onClick={() => pushToast("Importa servizi · demo")}
+            >
               <Upload className="nb-ghostBtnIcon" aria-hidden={true} />
               Importa
             </button>
-            <button type="button" className="nb-ghostBtn nb-svGhost" disabled>
+            <button
+              type="button"
+              className="nb-ghostBtn nb-svGhost"
+              onClick={() => pushToast(`Esporta · ${filtered.length} servizi demo`)}
+            >
               <Download className="nb-ghostBtnIcon" aria-hidden={true} />
               Esporta
             </button>
-            <button type="button" className="nb-ghostBtn nb-svGhost" disabled>
+            <button
+              type="button"
+              className="nb-ghostBtn nb-svGhost"
+              onClick={() => setConfirmKind("duplicate")}
+            >
               <Copy className="nb-ghostBtnIcon" aria-hidden={true} />
               Duplica
             </button>
-            <button type="button" className="nb-newBtn nb-svNew" disabled>
+            <button type="button" className="nb-newBtn nb-svNew" onClick={() => setWizardOpen(true)}>
               <Plus className="nb-newBtnIcon" aria-hidden={true} />
               Nuovo servizio
             </button>
@@ -523,7 +699,6 @@ export default function ServicesWorkspace() {
         </div>
       </section>
 
-      {/* DESTRA — dettaglio */}
       <aside className="nb-svDetail" aria-label={`Dettaglio ${selected.name}`}>
         <div className="nb-svDetailHead">
           <div className={clsx("nb-svDetailIcon", `tone-${selected.tone}`)} aria-hidden={true}>
@@ -577,26 +752,131 @@ export default function ServicesWorkspace() {
         </div>
 
         <div className="nb-svDetailActions">
-          <button type="button" className="nb-svAction" disabled>
+          <button type="button" className="nb-svAction" onClick={openEdit}>
             <Pencil className="nb-svActionIcon" aria-hidden={true} />
             Modifica
           </button>
-          <button type="button" className="nb-svAction" disabled>
+          <button type="button" className="nb-svAction" onClick={() => setConfirmKind("duplicate")}>
             <Copy className="nb-svActionIcon" aria-hidden={true} />
             Duplica
           </button>
-          <button type="button" className="nb-svAction warn" disabled>
-            <EyeOff className="nb-svActionIcon" aria-hidden={true} />
-            Disattiva
+          <button type="button" className="nb-svAction warn" onClick={() => setConfirmKind("toggle")}>
+            {selected.active ? (
+              <EyeOff className="nb-svActionIcon" aria-hidden={true} />
+            ) : (
+              <Eye className="nb-svActionIcon" aria-hidden={true} />
+            )}
+            {selected.active ? "Disattiva" : "Riattiva"}
           </button>
-          <button type="button" className="nb-svAction danger" disabled>
+          <button type="button" className="nb-svAction danger" onClick={() => setConfirmKind("delete")}>
             <Trash2 className="nb-svActionIcon" aria-hidden={true} />
             Elimina
           </button>
         </div>
 
-        <p className="nb-svDetailHint">Demo UI — pronto per collegamento al Core</p>
+        <p className="nb-svDetailHint">Catalogo demo — azioni disponibili in questa schermata</p>
       </aside>
+
+      <NewServiceWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onCreate={handleWizardCreate}
+      />
+
+      {editOpen ? (
+        <div className="nb-dialogRoot isOpen" role="presentation">
+          <button
+            type="button"
+            className="nb-dialogBackdrop"
+            aria-label="Annulla"
+            onClick={() => setEditOpen(false)}
+          />
+          <div className="nb-dialogCard nb-svEditDialog" role="dialog" aria-modal="true" aria-label="Modifica servizio">
+            <h2 className="nb-dialogTitle">Modifica servizio</h2>
+            <p className="nb-dialogSub">{selected.name}</p>
+            <label className="nb-drawerField">
+              <span className="nb-drawerFieldLabel">Nome</span>
+              <input
+                className="nb-drawerInput"
+                value={editDraft.name}
+                onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))}
+              />
+            </label>
+            <div className="nb-drawerRow2">
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Durata (min)</span>
+                <input
+                  className="nb-drawerInput"
+                  type="number"
+                  min={5}
+                  value={editDraft.durationMin}
+                  onChange={(e) =>
+                    setEditDraft((d) => ({ ...d, durationMin: Number(e.target.value) || 0 }))
+                  }
+                />
+              </label>
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Prezzo (€)</span>
+                <input
+                  className="nb-drawerInput"
+                  type="number"
+                  min={0}
+                  value={editDraft.price}
+                  onChange={(e) =>
+                    setEditDraft((d) => ({ ...d, price: Number(e.target.value) || 0 }))
+                  }
+                />
+              </label>
+            </div>
+            <label className="nb-drawerField">
+              <span className="nb-drawerFieldLabel">Descrizione</span>
+              <textarea
+                className="nb-drawerTextarea"
+                rows={3}
+                value={editDraft.description}
+                onChange={(e) => setEditDraft((d) => ({ ...d, description: e.target.value }))}
+              />
+            </label>
+            <div className="nb-dialogActions" style={{ marginTop: 14 }}>
+              <button type="button" className="nb-ghostBtn" onClick={() => setEditOpen(false)}>
+                Annulla
+              </button>
+              <button type="button" className="nb-newBtn" onClick={saveEdit}>
+                Salva
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {confirmCopy ? (
+        <div className="nb-dialogRoot isOpen" role="presentation">
+          <button
+            type="button"
+            className="nb-dialogBackdrop"
+            aria-label="Annulla"
+            onClick={() => setConfirmKind(null)}
+          />
+          <div className="nb-dialogCard" role="dialog" aria-modal="true" aria-labelledby="nb-sv-confirm-title">
+            <h2 className="nb-dialogTitle" id="nb-sv-confirm-title">
+              {confirmCopy.title}
+            </h2>
+            <p className="nb-dialogSub">{confirmCopy.sub}</p>
+            <div className="nb-dialogActions">
+              <button type="button" className="nb-ghostBtn" onClick={() => setConfirmKind(null)}>
+                Annulla
+              </button>
+              <button
+                type="button"
+                className={clsx("nb-newBtn", confirmKind === "delete" && "nb-svConfirmDanger")}
+                onClick={runConfirm}
+              >
+                {confirmCopy.confirm}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
