@@ -189,7 +189,7 @@ function formatImportSummary(added: number, alreadyPresent: number, ignored: num
   return `Import completato: ${parts.join(", ")}.`;
 }
 
-export function ClientsManager() {
+export function ClientsManager({ androidChromeHidden = false }: { androidChromeHidden?: boolean }) {
   const { user } = useAuth();
   const { showToast } = useToast();
   const router = useRouter();
@@ -651,7 +651,7 @@ export function ClientsManager() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className={cn("space-y-5", androidChromeHidden && "android-manager-compact")}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[14px] text-beauty-muted">Anagrafica completa salvata nel namespace NovaBeauty.</p>
         <div className="flex flex-wrap items-center justify-end gap-2">

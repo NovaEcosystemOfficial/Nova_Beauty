@@ -1,5 +1,5 @@
-import { AppShell } from "@/components/layout/AppShell";
 import { PrivateRoute } from "@/components/auth/PrivateRoute";
+import { AndroidAppShellGate } from "@/components/android/layout/AndroidAppShellGate";
 
 export default function MainAppLayout({
   children
@@ -8,7 +8,7 @@ export default function MainAppLayout({
 }>) {
   return (
     <PrivateRoute>
-      <AppShell>{children}</AppShell>
+      <AndroidAppShellGate>{children}</AndroidAppShellGate>
     </PrivateRoute>
   );
 }

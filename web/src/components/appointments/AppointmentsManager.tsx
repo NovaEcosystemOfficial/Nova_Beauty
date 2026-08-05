@@ -33,6 +33,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { db } from "@/lib/firebase/client";
 import { appointmentsPath, clientsPath, servicesPath } from "@/lib/firebase/paths";
 import { createNotification } from "@/lib/notifications/notifications";
+import { cn } from "@/lib/utils/cn";
 import type { AppointmentDocument, ClientDocument, ServiceDocument } from "@/types/firestore";
 
 type AppointmentItem = AppointmentDocument & { id: string };
@@ -108,7 +109,7 @@ function appointmentToForm(appointment: AppointmentItem): AppointmentFormState {
   };
 }
 
-export function AppointmentsManager() {
+export function AppointmentsManager({ androidChromeHidden = false }: { androidChromeHidden?: boolean }) {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
@@ -377,7 +378,7 @@ export function AppointmentsManager() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className={cn("space-y-5", androidChromeHidden && "android-manager-compact")}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[14px] text-beauty-muted">Agenda reale salvata in Firestore.</p>
         <PrimaryButton type="button" onClick={openCreateForm}>

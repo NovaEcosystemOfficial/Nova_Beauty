@@ -11,8 +11,10 @@ export function NovaBeautySplash({ fadingOut }: NovaBeautySplashProps) {
       role="presentation"
       aria-hidden="true"
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/splash/novabeauty-splash.png" alt="" className="nova-splash__image" />
+      <div className="nova-splash__frame">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/splash/novabeauty-splash.png" alt="" className="nova-splash__image" />
+      </div>
     </div>
   );
 }

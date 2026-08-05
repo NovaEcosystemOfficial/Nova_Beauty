@@ -33,6 +33,7 @@ import {
   formatServiceMeta,
   getServiceCategoryIcon
 } from "@/lib/utils/service-display";
+import { cn } from "@/lib/utils/cn";
 import type { ServiceDocument } from "@/types/firestore";
 
 type ServiceItem = ServiceDocument & { id: string };
@@ -128,7 +129,7 @@ function parseOptionalPrice(value: string) {
   return Number.isFinite(price) && price >= 0 ? price : null;
 }
 
-export function ServicesManager() {
+export function ServicesManager({ androidChromeHidden = false }: { androidChromeHidden?: boolean }) {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [services, setServices] = useState<ServiceItem[]>([]);
@@ -389,7 +390,7 @@ export function ServicesManager() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className={cn("space-y-5", androidChromeHidden && "android-manager-compact")}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[14px] text-beauty-muted">Crea il catalogo trattamenti. I prezzi restano da impostare da chi usa l&apos;app.</p>
         <div className="flex flex-col gap-2 sm:flex-row">
