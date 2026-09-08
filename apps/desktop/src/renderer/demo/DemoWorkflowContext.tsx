@@ -31,6 +31,14 @@ import {
   listServices,
   updateServiceViaRepository
 } from "../data/servicesApi";
+import {
+  createSupplierRemote,
+  deleteSupplierRemote,
+  dtoToWorkflowSupplier,
+  listSuppliers,
+  supplierMetaJson,
+  updateSupplierRemote
+} from "../data/suppliersApi";
 import type { ClientListQuery, ClientSort } from "../../models/Client";
 
 export type ApptStatus = "confermato" | "da_confermare" | "completato" | "annullato";
@@ -48,7 +56,6 @@ export type WorkflowClient = {
   lastTreatment: string;
   nextAppointment: string;
   totalSpent: number;
-  fidelityPoints: number;
   tags: string[];
   diaryPlaceholders: string[];
   historyLines: string[];
@@ -321,10 +328,11 @@ type DemoWorkflowValue = {
   deleteService: (id: string) => Promise<boolean>;
   duplicateService: (id: string) => Promise<string | null>;
   reloadServices: (query?: ServiceListQuery) => Promise<void>;
-  createSupplier: (draft: NewSupplierDraft) => string;
-  updateSupplier: (id: string, draft: SupplierUpdateDraft) => void;
-  toggleSupplierStatus: (id: string) => void;
-  deleteSupplier: (id: string) => void;
+  createSupplier: (draft: NewSupplierDraft) => Promise<string>;
+  updateSupplier: (id: string, draft: SupplierUpdateDraft) => Promise<boolean>;
+  toggleSupplierStatus: (id: string) => Promise<boolean>;
+  deleteSupplier: (id: string) => Promise<boolean>;
+  reloadSuppliers: () => Promise<void>;
   openInventoryProduct: (productCode: string) => void;
   openSupplierModule: (supplierIdOrName: string) => void;
   clearInventoryFocus: () => void;
@@ -360,7 +368,6 @@ const INITIAL_CLIENTS: WorkflowClient[] = [
     lastTreatment: "Pulizia viso deep",
     nextAppointment: "Oggi · 09:00",
     totalSpent: 1240,
-    fidelityPoints: 180,
     tags: ["VIP", "Viso"],
     diaryPlaceholders: ["Before/After viso", "Mappa zone", "Follow-up"],
     historyLines: ["Pulizia viso · 2 ago", "Peeling · 15 giu", "Idratazione · 2 mag"]
@@ -378,7 +385,6 @@ const INITIAL_CLIENTS: WorkflowClient[] = [
     lastTreatment: "Massaggio rilassante",
     nextAppointment: "Oggi · 11:30",
     totalSpent: 860,
-    fidelityPoints: 95,
     tags: ["Massaggi"],
     diaryPlaceholders: ["Zona schiena", "Preferenze olio"],
     historyLines: ["Massaggio · 28 lug", "Pressoterapia · 10 giu"]
@@ -396,7 +402,6 @@ const INITIAL_CLIENTS: WorkflowClient[] = [
     lastTreatment: "Epilazione gambe",
     nextAppointment: "Oggi · 14:15",
     totalSpent: 620,
-    fidelityPoints: 70,
     tags: ["Epilazione"],
     diaryPlaceholders: ["Zone trattate"],
     historyLines: ["Epilazione · 20 lug", "Epilazione · 18 giu"]
@@ -414,7 +419,6 @@ const INITIAL_CLIENTS: WorkflowClient[] = [
     lastTreatment: "Trucco permanente",
     nextAppointment: "Oggi · 16:00",
     totalSpent: 1890,
-    fidelityPoints: 240,
     tags: ["VIP", "PMU"],
     diaryPlaceholders: ["Sopracciglia", "Pigmento"],
     historyLines: ["PMU · 15 lug", "PMU · 20 mag"]
@@ -432,7 +436,6 @@ const INITIAL_CLIENTS: WorkflowClient[] = [
     lastTreatment: "—",
     nextAppointment: "8 ago · 10:00",
     totalSpent: 0,
-    fidelityPoints: 0,
     tags: ["Nuova"],
     diaryPlaceholders: ["Anamnesi"],
     historyLines: []
@@ -450,7 +453,6 @@ const INITIAL_CLIENTS: WorkflowClient[] = [
     lastTreatment: "Manicure spa",
     nextAppointment: "Non pianificato",
     totalSpent: 410,
-    fidelityPoints: 40,
     tags: ["Da richiamare"],
     diaryPlaceholders: [],
     historyLines: ["Manicure · 12 apr"]
@@ -468,7 +470,6 @@ const INITIAL_CLIENTS: WorkflowClient[] = [
     lastTreatment: "Pressoterapia",
     nextAppointment: "12 ago · 15:30",
     totalSpent: 980,
-    fidelityPoints: 110,
     tags: ["Pacchetto"],
     diaryPlaceholders: ["Gambe", "Circonferenze"],
     historyLines: ["Pressoterapia · 30 lug", "Pressoterapia · 16 lug"]
@@ -486,7 +487,6 @@ const INITIAL_CLIENTS: WorkflowClient[] = [
     lastTreatment: "Peeling enzimatico",
     nextAppointment: "19 ago · 11:00",
     totalSpent: 745,
-    fidelityPoints: 85,
     tags: ["Viso", "Bio"],
     diaryPlaceholders: ["Texture pelle"],
     historyLines: ["Peeling · 25 lug", "Pulizia · 1 giu"]
@@ -664,226 +664,6 @@ const INITIAL_ACTIVITIES: ActivityItem[] = [
   { id: "act4", time: "11:00", text: "Prodotto scaricato" }
 ];
 
-const INITIAL_SUPPLIERS: WorkflowSupplier[] = [
-  {
-    id: "f1",
-    name: "DermLab Italia",
-    category: "Dermocosmesi",
-    status: "attivo",
-    lastOrder: "1 ago 2026",
-    contact: "Marco Bianchi",
-    phone: "+39 02 8899 1100",
-    email: "ordini@dermlab.it",
-    whatsapp: "+39 340 112 2200",
-    website: "https://dermlab.it",
-    catalogUrl: "https://dermlab.it/catalogo",
-    address: "Via Tortona 12, Milano",
-    vat: "IT12345678901",
-    avgDelivery: "3–4 giorni",
-    minOrder: "€150",
-    reorderMethod: "sito",
-    notes: "Listino B2B aggiornato mensilmente. Sconto 5% oltre €500.",
-    productsCount: 4,
-    ordersValue: "€4.280",
-    reliability: "98%",
-    logoTone: "primary",
-    logoInitials: "DL",
-    linkedProducts: [
-      { name: "Crema viso idratante", sku: "CR-VIS-01", stockHint: "18 pz" },
-      { name: "Crema corpo nutriente", sku: "CR-COR-02", stockHint: "Scorta bassa" },
-      { name: "Crema lenitiva post", sku: "CR-LN-03", stockHint: "6 pz" },
-      { name: "Siero partner kit", sku: "SR-KIT-01", stockHint: "Catalogo" }
-    ]
-  },
-  {
-    id: "f2",
-    name: "GlowSupply",
-    category: "Dermocosmesi",
-    status: "attivo",
-    lastOrder: "28 lug 2026",
-    contact: "Elena Verdi",
-    phone: "+39 06 4455 7788",
-    email: "hello@glowsupply.com",
-    whatsapp: "+39 333 990 4411",
-    website: "https://glowsupply.com",
-    catalogUrl: "https://glowsupply.com/b2b",
-    address: "Via Appia Nuova 88, Roma",
-    vat: "IT98765432109",
-    avgDelivery: "2 giorni",
-    minOrder: "€100",
-    reorderMethod: "email",
-    notes: "Preferisce ordini via email con PDF allegato.",
-    productsCount: 2,
-    ordersValue: "€2.140",
-    reliability: "95%",
-    logoTone: "gold",
-    logoInitials: "GS",
-    linkedProducts: [
-      { name: "Siero vitamina C", sku: "SR-VC-01", stockHint: "11 pz" },
-      { name: "Siero acido ialuronico", sku: "SR-HA-02", stockHint: "Esaurito" }
-    ]
-  },
-  {
-    id: "f3",
-    name: "BeautyRaw",
-    category: "Consumabili",
-    status: "attivo",
-    lastOrder: "20 lug 2026",
-    contact: "Sara Neri",
-    phone: "+39 051 220 3344",
-    email: "ordini@beautyraw.it",
-    whatsapp: "+39 348 771 0099",
-    website: "https://beautyraw.it",
-    catalogUrl: "https://beautyraw.it/shop",
-    address: "Via Emilia 45, Bologna",
-    vat: "IT11223344556",
-    avgDelivery: "4–5 giorni",
-    minOrder: "€80",
-    reorderMethod: "whatsapp",
-    notes: "Riordino rapido su WhatsApp Business.",
-    productsCount: 2,
-    ordersValue: "€980",
-    reliability: "92%",
-    logoTone: "mint",
-    logoInitials: "BR",
-    linkedProducts: [
-      { name: "Maschera argilla verde", sku: "MS-AR-01", stockHint: "14 pz" },
-      { name: "Maschera tessuto HA", sku: "MS-TS-02", stockHint: "Scorta bassa" }
-    ]
-  },
-  {
-    id: "f4",
-    name: "SafeClinic",
-    category: "Monouso",
-    status: "attivo",
-    lastOrder: "30 lug 2026",
-    contact: "Luca Conti",
-    phone: "+39 011 556 7788",
-    email: "vendite@safeclinic.it",
-    whatsapp: "+39 320 445 6677",
-    website: "https://safeclinic.it",
-    catalogUrl: "https://safeclinic.it/catalogo-pdf",
-    address: "Corso Francia 210, Torino",
-    vat: "IT55667788990",
-    avgDelivery: "1–2 giorni",
-    minOrder: "€50",
-    reorderMethod: "telefono",
-    notes: "Consegna espresso su Torino e provincia.",
-    productsCount: 2,
-    ordersValue: "€1.560",
-    reliability: "99%",
-    logoTone: "rose",
-    logoInitials: "SC",
-    linkedProducts: [
-      { name: "Guanti nitrile M", sku: "MN-GN-M", stockHint: "120 pz" },
-      { name: "Lenzuolino monouso", sku: "MN-LZ-01", stockHint: "Scorta bassa" }
-    ]
-  },
-  {
-    id: "f5",
-    name: "WaxPro",
-    category: "Cera & Depilazione",
-    status: "attivo",
-    lastOrder: "22 lug 2026",
-    contact: "Anna Greco",
-    phone: "+39 081 334 5566",
-    email: "ordini@waxpro.it",
-    whatsapp: "+39 347 889 0011",
-    website: "https://waxpro.it",
-    catalogUrl: "https://waxpro.it/listino",
-    address: "Via Toledo 100, Napoli",
-    vat: "IT66778899001",
-    avgDelivery: "5 giorni",
-    minOrder: "€120",
-    reorderMethod: "sito",
-    notes: "Portale riordino con tracking lotto.",
-    productsCount: 2,
-    ordersValue: "€760",
-    reliability: "90%",
-    logoTone: "lavender",
-    logoInitials: "WP",
-    linkedProducts: [
-      { name: "Strisce depilatorie", sku: "CN-ST-01", stockHint: "Esaurito" },
-      { name: "Cera professionale hot", sku: "CN-CW-01", stockHint: "7 pz" }
-    ]
-  },
-  {
-    id: "f6",
-    name: "StudioTech",
-    category: "Attrezzature",
-    status: "attivo",
-    lastOrder: "15 giu 2026",
-    contact: "Paolo Ferri",
-    phone: "+39 02 1122 3344",
-    email: "support@studiotech.eu",
-    whatsapp: "+39 331 220 9988",
-    website: "https://studiotech.eu",
-    catalogUrl: "https://studiotech.eu/equipment",
-    address: "Via Mecenate 76, Milano",
-    vat: "IT77889900112",
-    avgDelivery: "7–10 giorni",
-    minOrder: "€300",
-    reorderMethod: "manuale",
-    notes: "Preventivi attrezzature su richiesta. Assistenza inclusa 12 mesi.",
-    productsCount: 1,
-    ordersValue: "€180",
-    reliability: "94%",
-    logoTone: "lavender",
-    logoInitials: "ST",
-    linkedProducts: [{ name: "Lampada LED magnifier", sku: "AT-LED-01", stockHint: "2 pz" }]
-  },
-  {
-    id: "f7",
-    name: "BodyFlow",
-    category: "Consumabili",
-    status: "disattivo",
-    lastOrder: "4 ago 2026",
-    contact: "Giulia Romano",
-    phone: "+39 055 778 9900",
-    email: "b2b@bodyflow.it",
-    whatsapp: "+39 339 554 1122",
-    website: "https://bodyflow.it",
-    catalogUrl: "https://bodyflow.it/refill",
-    address: "Via della Scala 9, Firenze",
-    vat: "IT33445566778",
-    avgDelivery: "3 giorni",
-    minOrder: "€90",
-    reorderMethod: "email",
-    notes: "Temporaneamente sospeso — rinnovo contratto in corso.",
-    productsCount: 1,
-    ordersValue: "€420",
-    reliability: "88%",
-    logoTone: "mint",
-    logoInitials: "BF",
-    linkedProducts: [{ name: "Gel refill pressoterapia", sku: "CN-GL-01", stockHint: "Scorta bassa" }]
-  },
-  {
-    id: "f8",
-    name: "NaturalOil Co",
-    category: "Dermocosmesi",
-    status: "attivo",
-    lastOrder: "3 ago 2026",
-    contact: "Francesca Villa",
-    phone: "+39 049 221 3344",
-    email: "ordini@naturaloil.co",
-    whatsapp: "+39 345 667 8899",
-    website: "https://naturaloil.co",
-    catalogUrl: "https://naturaloil.co/oils",
-    address: "Via Roma 15, Padova",
-    vat: "IT22334455667",
-    avgDelivery: "2–3 giorni",
-    minOrder: "€60",
-    reorderMethod: "whatsapp",
-    notes: "Oli bio certificati. Pack da 6 pezzi.",
-    productsCount: 1,
-    ordersValue: "€310",
-    reliability: "96%",
-    logoTone: "gold",
-    logoInitials: "NO",
-    linkedProducts: [{ name: "Olio mandorle dolci", sku: "OL-MD-01", stockHint: "9 pz" }]
-  }
-];
-
 function initialsFromName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "NF";
@@ -929,7 +709,7 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
   const [clientSort, setClientSort] = useState<ClientSort>("name_asc");
   const [services, setServices] = useState<WorkflowService[]>([]);
   const [serviceSort, setServiceSort] = useState<ServiceSort>("name_asc");
-  const [suppliers, setSuppliers] = useState(INITIAL_SUPPLIERS);
+  const [suppliers, setSuppliers] = useState<WorkflowSupplier[]>([]);
   const [appointments, setAppointments] = useState<WorkflowAppointment[]>([]);
   const [appointmentSort, setAppointmentSort] = useState<AppointmentSort>("date_asc");
   const [activities, setActivities] = useState(INITIAL_ACTIVITIES);
@@ -1050,6 +830,21 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
     void reloadServices({ sort: "name_asc" });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- boot once
 
+  const reloadSuppliers = useCallback(async () => {
+    const result = await listSuppliers();
+    if (!result.ok) {
+      if (result.code !== "ENGINE_UNAVAILABLE" && result.code !== "NO_IPC") {
+        pushToast(result.message || "Errore caricamento fornitori");
+      }
+      return;
+    }
+    setSuppliers(result.data.map(dtoToWorkflowSupplier));
+  }, [pushToast]);
+
+  useEffect(() => {
+    void reloadSuppliers();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- boot once
+
   const createClient = useCallback(
     async (draft: NewClientDraft) => {
       const name = `${draft.firstName.trim()} ${draft.lastName.trim()}`.trim();
@@ -1075,7 +870,6 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
         lastTreatment: "—",
         nextAppointment: "—",
         totalSpent: 0,
-        fidelityPoints: 0,
         tags: ["Nuova", ...(draft.privacyConsent ? ["Privacy ok"] : [])],
         diaryPlaceholders: ["Scheda anamnesi"],
         historyLines: []
@@ -1109,7 +903,6 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
             lastTreatment: "—",
             nextAppointment: "—",
             totalSpent: 0,
-            fidelityPoints: 0,
             tags: ["Nuova", ...(draft.privacyConsent ? ["Privacy ok"] : [])],
             diaryPlaceholders: ["Scheda anamnesi"],
             historyLines: [],
@@ -1326,96 +1119,116 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
   );
 
   const createSupplier = useCallback(
-    (draft: NewSupplierDraft) => {
-      const id = `sup-${Date.now()}`;
+    async (draft: NewSupplierDraft) => {
       const name = draft.name.trim();
-      const supplier: WorkflowSupplier = {
-        id,
+      const result = await createSupplierRemote({
         name,
         category: draft.category,
         status: "attivo",
-        lastOrder: "—",
-        contact: draft.contact.trim() || "—",
-        phone: draft.phone.trim() || "",
-        email: draft.email.trim() || "",
-        whatsapp: draft.whatsapp?.trim() || "",
-        website: draft.website?.trim() || "",
-        catalogUrl: draft.catalogUrl?.trim() || "",
-        address: draft.address?.trim() || "—",
-        vat: draft.vat?.trim() || "—",
-        avgDelivery: draft.avgDelivery?.trim() || "—",
-        minOrder: draft.minOrder?.trim() || "—",
-        reorderMethod: draft.reorderMethod ?? "email",
+        contact: draft.contact.trim(),
+        phone: draft.phone.trim(),
+        email: draft.email.trim(),
         notes: draft.notes.trim(),
-        productsCount: 0,
-        ordersValue: "€0",
-        reliability: "—",
-        logoTone: "primary",
-        logoInitials: initialsFromName(name),
-        linkedProducts: []
-      };
-      setSuppliers((prev) => [supplier, ...prev]);
+        metaJson: supplierMetaJson({
+          lastOrder: "—",
+          whatsapp: draft.whatsapp?.trim() || "",
+          website: draft.website?.trim() || "",
+          catalogUrl: draft.catalogUrl?.trim() || "",
+          address: draft.address?.trim() || "—",
+          vat: draft.vat?.trim() || "—",
+          avgDelivery: draft.avgDelivery?.trim() || "—",
+          minOrder: draft.minOrder?.trim() || "—",
+          reorderMethod: draft.reorderMethod ?? "email",
+          logoTone: "primary",
+          logoInitials: initialsFromName(name)
+        })
+      });
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile creare il fornitore");
+        return "";
+      }
+      await reloadSuppliers();
       pushToast("Fornitore creato");
-      pushActivity(`Nuovo fornitore creato · ${supplier.name}`);
-      return id;
+      pushActivity(`Nuovo fornitore creato · ${name}`);
+      return result.data.id;
     },
-    [pushActivity, pushToast]
+    [pushActivity, pushToast, reloadSuppliers]
   );
 
   const updateSupplier = useCallback(
-    (id: string, draft: SupplierUpdateDraft) => {
-      setSuppliers((prev) =>
-        prev.map((s) => {
-          if (s.id !== id) return s;
-          const name = draft.name.trim() || s.name;
-          return {
-            ...s,
-            name,
-            category: draft.category || s.category,
-            contact: draft.contact.trim() || "—",
-            phone: draft.phone.trim(),
-            email: draft.email.trim(),
-            whatsapp: draft.whatsapp?.trim() ?? s.whatsapp,
-            website: draft.website?.trim() ?? s.website,
-            catalogUrl: draft.catalogUrl?.trim() ?? s.catalogUrl,
-            address: draft.address?.trim() || s.address,
-            vat: draft.vat?.trim() || s.vat,
-            avgDelivery: draft.avgDelivery?.trim() || s.avgDelivery,
-            minOrder: draft.minOrder?.trim() || s.minOrder,
-            reorderMethod: draft.reorderMethod ?? s.reorderMethod,
-            notes: draft.notes.trim(),
-            status: draft.status ?? s.status,
-            logoInitials: initialsFromName(name)
-          };
+    async (id: string, draft: SupplierUpdateDraft) => {
+      const current = suppliers.find((s) => s.id === id);
+      if (!current) {
+        pushToast("Fornitore non trovato");
+        return false;
+      }
+      const name = draft.name.trim() || current.name;
+      const result = await updateSupplierRemote({
+        id,
+        name,
+        category: draft.category || current.category,
+        contact: draft.contact.trim(),
+        phone: draft.phone.trim(),
+        email: draft.email.trim(),
+        notes: draft.notes.trim(),
+        status: draft.status ?? current.status,
+        metaJson: supplierMetaJson({
+          lastOrder: current.lastOrder,
+          whatsapp: draft.whatsapp?.trim() ?? current.whatsapp,
+          website: draft.website?.trim() ?? current.website,
+          catalogUrl: draft.catalogUrl?.trim() ?? current.catalogUrl,
+          address: draft.address?.trim() || current.address,
+          vat: draft.vat?.trim() || current.vat,
+          avgDelivery: draft.avgDelivery?.trim() || current.avgDelivery,
+          minOrder: draft.minOrder?.trim() || current.minOrder,
+          reorderMethod: draft.reorderMethod ?? current.reorderMethod,
+          ordersValue: current.ordersValue,
+          reliability: current.reliability,
+          logoTone: current.logoTone,
+          logoInitials: initialsFromName(name)
         })
-      );
+      });
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile aggiornare il fornitore");
+        return false;
+      }
+      await reloadSuppliers();
       pushToast("Fornitore aggiornato");
+      return true;
     },
-    [pushToast]
+    [pushToast, reloadSuppliers, suppliers]
   );
 
   const toggleSupplierStatus = useCallback(
-    (id: string) => {
-      setSuppliers((prev) => {
-        const target = prev.find((s) => s.id === id);
-        if (!target) return prev;
-        const next = target.status === "attivo" ? "disattivo" : "attivo";
-        pushToast(next === "attivo" ? "Fornitore riattivato" : "Fornitore disattivato");
-        return prev.map((s) => (s.id === id ? { ...s, status: next } : s));
-      });
+    async (id: string) => {
+      const target = suppliers.find((s) => s.id === id);
+      if (!target) return false;
+      const next = target.status === "attivo" ? "disattivo" : "attivo";
+      const result = await updateSupplierRemote({ id, status: next });
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile aggiornare lo stato");
+        return false;
+      }
+      await reloadSuppliers();
+      pushToast(next === "attivo" ? "Fornitore riattivato" : "Fornitore disattivato");
+      return true;
     },
-    [pushToast]
+    [pushToast, reloadSuppliers, suppliers]
   );
 
   const deleteSupplier = useCallback(
-    (id: string) => {
-      setSuppliers((prev) => {
-        const target = prev.find((s) => s.id === id);
-        if (target) pushToast(`Fornitore eliminato · ${target.name}`);
-        return prev.filter((s) => s.id !== id);
-      });
+    async (id: string) => {
+      const target = suppliers.find((s) => s.id === id);
+      const result = await deleteSupplierRemote(id);
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile eliminare il fornitore");
+        return false;
+      }
+      await reloadSuppliers();
+      if (target) pushToast(`Fornitore eliminato · ${target.name}`);
+      return true;
     },
-    [pushToast]
+    [pushToast, reloadSuppliers, suppliers]
   );
 
   const openInventoryProduct = useCallback((productCode: string) => {
@@ -1612,7 +1425,6 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
             return {
               ...c,
               totalSpent: c.totalSpent + payload.amount,
-              fidelityPoints: c.fidelityPoints + Math.max(5, Math.round(payload.amount / 10)),
               lastTreatment: appt.service,
               lastAppointment: "Oggi",
               historyLines: [
@@ -1716,6 +1528,7 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
       updateSupplier,
       toggleSupplierStatus,
       deleteSupplier,
+      reloadSuppliers,
       openInventoryProduct,
       openSupplierModule,
       clearInventoryFocus,
@@ -1776,6 +1589,7 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
       updateSupplier,
       toggleSupplierStatus,
       deleteSupplier,
+      reloadSuppliers,
       openInventoryProduct,
       openSupplierModule,
       clearInventoryFocus,

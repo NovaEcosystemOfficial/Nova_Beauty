@@ -1,7 +1,7 @@
 /**
  * Model Cliente — tabella `clients`.
  * Campi Sprint 2: nome, cognome, telefono, email, nascita, note, stato + timestamp.
- * `profileJson` conserva metadati UI demo (fidelity, storico…) senza perdere la Sprint 0.
+ * `profileJson` conserva metadati UI demo (storico, tag…) senza perdere la Sprint 0.
  */
 import { createEntityId, nowIso, readBool, readString, type SqlMap } from "../core/types";
 import type { EntityTimestamps } from "./BaseEntity";

@@ -7,6 +7,7 @@ export * from "./Operator";
 export * from "./Appointment";
 export * from "./Service";
 export * from "./Product";
+export * from "./Supplier";
 export * from "./Category";
 export * from "./InventoryMovement";
 export * from "./Settings";

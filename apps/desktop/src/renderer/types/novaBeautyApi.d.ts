@@ -13,12 +13,26 @@ import type {
   ClientListQuery,
   ClientUpdateInput
 } from "../../models/Client";
+import type { InventoryMovementData } from "../../models/InventoryMovement";
+import type {
+  InventoryMoveInput,
+  ProductCreateInput,
+  ProductData,
+  ProductListQuery,
+  ProductUpdateInput
+} from "../../models/Product";
 import type {
   ServiceCreateInput,
   ServiceData,
   ServiceListQuery,
   ServiceUpdateInput
 } from "../../models/Service";
+import type {
+  SupplierCreateInput,
+  SupplierDto,
+  SupplierListQuery,
+  SupplierUpdateInput
+} from "../../models/Supplier";
 
 export type ClientIpcResult<T> =
   | { ok: true; data: T }
@@ -48,10 +62,30 @@ export type NovaBeautyServicesApi = {
   delete: (id: string) => Promise<ClientIpcResult<{ id: string }>>;
 };
 
+export type NovaBeautyInventoryApi = {
+  list: (query?: ProductListQuery) => Promise<ClientIpcResult<ProductData[]>>;
+  get: (id: string) => Promise<ClientIpcResult<ProductData | null>>;
+  create: (input: ProductCreateInput) => Promise<ClientIpcResult<ProductData>>;
+  update: (input: ProductUpdateInput) => Promise<ClientIpcResult<ProductData>>;
+  delete: (id: string) => Promise<ClientIpcResult<{ id: string }>>;
+  movements: () => Promise<ClientIpcResult<InventoryMovementData[]>>;
+  move: (input: InventoryMoveInput) => Promise<ClientIpcResult<ProductData>>;
+};
+
+export type NovaBeautySuppliersApi = {
+  list: (query?: SupplierListQuery) => Promise<ClientIpcResult<SupplierDto[]>>;
+  get: (id: string) => Promise<ClientIpcResult<SupplierDto | null>>;
+  create: (input: SupplierCreateInput) => Promise<ClientIpcResult<SupplierDto>>;
+  update: (input: SupplierUpdateInput) => Promise<ClientIpcResult<SupplierDto>>;
+  delete: (id: string) => Promise<ClientIpcResult<{ id: string }>>;
+};
+
 export type NovaBeautyApi = {
   clients: NovaBeautyClientsApi;
   appointments: NovaBeautyAppointmentsApi;
   services: NovaBeautyServicesApi;
+  inventory: NovaBeautyInventoryApi;
+  suppliers: NovaBeautySuppliersApi;
 };
 
 export type NbLocalApi = {
@@ -59,6 +93,8 @@ export type NbLocalApi = {
   appointments?: NovaBeautyAppointmentsApi;
   clients?: NovaBeautyClientsApi;
   services?: NovaBeautyServicesApi;
+  inventory?: NovaBeautyInventoryApi;
+  suppliers?: NovaBeautySuppliersApi;
 };
 
 declare global {

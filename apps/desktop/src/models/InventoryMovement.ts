@@ -13,6 +13,16 @@ export type InventoryMovementData = EntityTimestamps & {
   operatorName: string;
 };
 
+export type InventoryMovementCreateInput = {
+  productId: string;
+  productName?: string;
+  kind: string;
+  quantity: number;
+  note?: string;
+  operatorName?: string;
+  id?: string;
+};
+
 export class InventoryMovementModel {
   readonly id: string;
   readonly createdAt: string;
@@ -61,6 +71,20 @@ export class InventoryMovementModel {
       quantity: this.quantity,
       note: this.note,
       operator_name: this.operatorName
+    };
+  }
+
+  toDto(): InventoryMovementData {
+    return {
+      id: this.id,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+      productId: this.productId,
+      productName: this.productName,
+      kind: this.kind,
+      quantity: this.quantity,
+      note: this.note,
+      operatorName: this.operatorName
     };
   }
 

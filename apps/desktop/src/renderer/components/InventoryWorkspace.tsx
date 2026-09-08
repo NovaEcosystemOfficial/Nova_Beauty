@@ -17,6 +17,17 @@ import {
 import clsx from "clsx";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useDemoWorkflow } from "../demo/DemoWorkflowContext";
+import {
+  applyInventoryMove,
+  createProductRemote,
+  deleteProductRemote,
+  dtoToWorkflowProduct,
+  listInventoryMovements,
+  listProducts,
+  productMetaJson,
+  updateProductRemote,
+  type WorkflowProduct
+} from "../data/inventoryApi";
 import NewSupplierDrawer from "./ui/NewSupplierDrawer";
 import RightDrawer from "./ui/RightDrawer";
 import SearchCombobox from "./ui/SearchCombobox";
@@ -32,23 +43,7 @@ type ProductCategory =
 
 type StockStatus = "disponibile" | "scorta_bassa" | "esaurito";
 
-type DemoProduct = {
-  id: string;
-  name: string;
-  category: ProductCategory;
-  code: string;
-  barcode: string;
-  supplier: string;
-  qty: number;
-  minStock: number;
-  location: string;
-  lot: string;
-  expiry: string;
-  lastMovement: string;
-  avgCost: number;
-  imageTone: "primary" | "mint" | "gold" | "lavender" | "rose";
-  imageUrl?: string | null;
-};
+type DemoProduct = WorkflowProduct;
 
 type MovementKind = "carico" | "scarico" | "rettifica";
 type ConfirmKind = "duplicate" | "delete" | null;
@@ -73,233 +68,6 @@ const PRODUCT_CATEGORIES: ProductCategory[] = [
   "Monouso",
   "Attrezzature",
   "Consumabili"
-];
-
-const INITIAL_PRODUCTS: DemoProduct[] = [
-  {
-    id: "p1",
-    name: "Crema viso idratante",
-    category: "Creme",
-    code: "CR-VIS-01",
-    barcode: "8001234567001",
-    supplier: "DermLab Italia",
-    qty: 18,
-    minStock: 8,
-    location: "Scaffale A1",
-    lot: "L2408-A",
-    expiry: "03/2027",
-    lastMovement: "Carico · 1 ago",
-    avgCost: 12.5,
-    imageTone: "primary"
-  },
-  {
-    id: "p2",
-    name: "Crema corpo nutriente",
-    category: "Creme",
-    code: "CR-COR-02",
-    barcode: "8001234567002",
-    supplier: "DermLab Italia",
-    qty: 3,
-    minStock: 8,
-    location: "Scaffale A2",
-    lot: "L2406-B",
-    expiry: "11/2026",
-    lastMovement: "Scarico · 4 ago",
-    avgCost: 9.8,
-    imageTone: "primary"
-  },
-  {
-    id: "p3",
-    name: "Siero vitamina C",
-    category: "Sieri",
-    code: "SR-VC-01",
-    barcode: "8001234567010",
-    supplier: "GlowSupply",
-    qty: 11,
-    minStock: 6,
-    location: "Frigo B",
-    lot: "L2501-C",
-    expiry: "06/2027",
-    lastMovement: "Carico · 28 lug",
-    avgCost: 18.0,
-    imageTone: "gold"
-  },
-  {
-    id: "p4",
-    name: "Siero acido ialuronico",
-    category: "Sieri",
-    code: "SR-HA-02",
-    barcode: "8001234567011",
-    supplier: "GlowSupply",
-    qty: 0,
-    minStock: 5,
-    location: "Frigo B",
-    lot: "L2409-D",
-    expiry: "01/2027",
-    lastMovement: "Scarico · 2 ago",
-    avgCost: 16.4,
-    imageTone: "gold"
-  },
-  {
-    id: "p5",
-    name: "Maschera argilla verde",
-    category: "Maschere",
-    code: "MS-AR-01",
-    barcode: "8001234567020",
-    supplier: "BeautyRaw",
-    qty: 14,
-    minStock: 6,
-    location: "Scaffale C1",
-    lot: "L2412-E",
-    expiry: "09/2027",
-    lastMovement: "Carico · 20 lug",
-    avgCost: 7.2,
-    imageTone: "mint"
-  },
-  {
-    id: "p6",
-    name: "Maschera tessuto HA",
-    category: "Maschere",
-    code: "MS-TS-02",
-    barcode: "8001234567021",
-    supplier: "BeautyRaw",
-    qty: 2,
-    minStock: 10,
-    location: "Scaffale C2",
-    lot: "L2502-F",
-    expiry: "08/2026",
-    lastMovement: "Scarico · 5 ago",
-    avgCost: 2.9,
-    imageTone: "mint"
-  },
-  {
-    id: "p7",
-    name: "Olio mandorle dolci",
-    category: "Oli",
-    code: "OL-MD-01",
-    barcode: "8001234567030",
-    supplier: "NaturalOil Co",
-    qty: 9,
-    minStock: 4,
-    location: "Scaffale D1",
-    lot: "L2407-G",
-    expiry: "12/2027",
-    lastMovement: "Scarico · 3 ago",
-    avgCost: 6.5,
-    imageTone: "lavender"
-  },
-  {
-    id: "p8",
-    name: "Guanti nitrile M",
-    category: "Monouso",
-    code: "MN-GN-M",
-    barcode: "8001234567040",
-    supplier: "SafeClinic",
-    qty: 120,
-    minStock: 50,
-    location: "Armadio E",
-    lot: "L2503-H",
-    expiry: "—",
-    lastMovement: "Carico · 30 lug",
-    avgCost: 0.08,
-    imageTone: "rose"
-  },
-  {
-    id: "p9",
-    name: "Lenzuolino monouso",
-    category: "Monouso",
-    code: "MN-LZ-01",
-    barcode: "8001234567041",
-    supplier: "SafeClinic",
-    qty: 4,
-    minStock: 20,
-    location: "Armadio E",
-    lot: "L2411-I",
-    expiry: "—",
-    lastMovement: "Scarico · 5 ago",
-    avgCost: 0.35,
-    imageTone: "rose"
-  },
-  {
-    id: "p10",
-    name: "Lampada LED magnifier",
-    category: "Attrezzature",
-    code: "AT-LED-01",
-    barcode: "8001234567050",
-    supplier: "StudioTech",
-    qty: 2,
-    minStock: 1,
-    location: "Cabina 1",
-    lot: "—",
-    expiry: "—",
-    lastMovement: "Inventario · 15 giu",
-    avgCost: 180,
-    imageTone: "lavender"
-  },
-  {
-    id: "p11",
-    name: "Strisce depilatorie",
-    category: "Consumabili",
-    code: "CN-ST-01",
-    barcode: "8001234567060",
-    supplier: "WaxPro",
-    qty: 0,
-    minStock: 15,
-    location: "Scaffale F",
-    lot: "L2405-J",
-    expiry: "—",
-    lastMovement: "Scarico · 31 lug",
-    avgCost: 0.12,
-    imageTone: "gold"
-  },
-  {
-    id: "p12",
-    name: "Cera professionale hot",
-    category: "Consumabili",
-    code: "CN-CW-01",
-    barcode: "8001234567061",
-    supplier: "WaxPro",
-    qty: 7,
-    minStock: 5,
-    location: "Scaffale F",
-    lot: "L2501-K",
-    expiry: "05/2028",
-    lastMovement: "Carico · 22 lug",
-    avgCost: 14.0,
-    imageTone: "gold"
-  },
-  {
-    id: "p13",
-    name: "Gel refill pressoterapia",
-    category: "Consumabili",
-    code: "CN-GL-01",
-    barcode: "8001234567062",
-    supplier: "BodyFlow",
-    qty: 2,
-    minStock: 6,
-    location: "Cabina 2",
-    lot: "L2408-L",
-    expiry: "02/2027",
-    lastMovement: "Scarico · 4 ago",
-    avgCost: 11.5,
-    imageTone: "mint"
-  },
-  {
-    id: "p14",
-    name: "Crema lenitiva post",
-    category: "Creme",
-    code: "CR-LN-03",
-    barcode: "8001234567003",
-    supplier: "DermLab Italia",
-    qty: 6,
-    minStock: 6,
-    location: "Scaffale A3",
-    lot: "L2502-M",
-    expiry: "04/2027",
-    lastMovement: "Scarico · 29 lug",
-    avgCost: 10.2,
-    imageTone: "primary"
-  }
 ];
 
 type SortKey = "nome" | "qty" | "scadenza" | "valore";
@@ -339,7 +107,12 @@ function needsReorder(p: DemoProduct): boolean {
 }
 
 function todayMoveLabel(kind: string): string {
-  return `${kind} · 5 ago`;
+  const stamp = new Date().toLocaleDateString("it-IT", { day: "numeric", month: "short" });
+  return `${kind} · ${stamp}`;
+}
+
+function isProductCategory(value: string): value is ProductCategory {
+  return (PRODUCT_CATEGORIES as string[]).includes(value);
 }
 
 export default function InventoryWorkspace() {
@@ -348,16 +121,19 @@ export default function InventoryWorkspace() {
     pushToast,
     inventoryFocusCode,
     clearInventoryFocus,
-    openSupplierModule
+    openSupplierModule,
+    reloadSuppliers
   } = useDemoWorkflow();
-  const [products, setProducts] = useState(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState<DemoProduct[]>([]);
+  const [movementsToday, setMovementsToday] = useState(0);
+  const [loaded, setLoaded] = useState(false);
   const [category, setCategory] = useState<"Tutti" | ProductCategory | "Da ordinare">("Tutti");
   const [query, setQuery] = useState("");
   const [supplierFilter, setSupplierFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("tutti");
   const [expiryFilter, setExpiryFilter] = useState<ExpiryFilter>("tutti");
   const [sort, setSort] = useState<SortKey>("nome");
-  const [selectedId, setSelectedId] = useState(INITIAL_PRODUCTS[0].id);
+  const [selectedId, setSelectedId] = useState("");
   const [supplierDrawerOpen, setSupplierDrawerOpen] = useState(false);
   const [orderCart, setOrderCart] = useState<Record<string, number>>({});
   const [orderOpen, setOrderOpen] = useState(false);
@@ -384,6 +160,46 @@ export default function InventoryWorkspace() {
   });
   const photoInputRef = useRef<HTMLInputElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  const reloadInventory = async (preferId?: string) => {
+    const [productsResult, movementsResult] = await Promise.all([
+      listProducts(),
+      listInventoryMovements()
+    ]);
+    if (!productsResult.ok) {
+      pushToast(productsResult.message || "Impossibile caricare il magazzino");
+      setLoaded(true);
+      return;
+    }
+    const next = productsResult.data.map(dtoToWorkflowProduct);
+    setProducts(next);
+    setSelectedId((current) => {
+      const want = preferId || current;
+      if (want && next.some((p) => p.id === want)) return want;
+      return next[0]?.id ?? "";
+    });
+    if (movementsResult.ok) {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const todayCount = movementsResult.data.filter((m) => {
+        const t = Date.parse(m.createdAt);
+        return Number.isFinite(t) && t >= start.getTime();
+      }).length;
+      setMovementsToday(todayCount);
+    }
+    setLoaded(true);
+  };
+
+  useEffect(() => {
+    void reloadInventory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- boot once
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    void reloadInventory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- riallinea nomi fornitore dopo rename/join
+  }, [suppliers]);
 
   useEffect(() => {
     if (!exportOpen) return;
@@ -481,7 +297,7 @@ export default function InventoryWorkspace() {
   }, [products, category, query, selectedSupplierName, statusFilter, expiryFilter, sort]);
 
   const selected =
-    products.find((p) => p.id === selectedId) ?? filtered[0] ?? products[0] ?? INITIAL_PRODUCTS[0];
+    products.find((p) => p.id === selectedId) ?? filtered[0] ?? products[0];
 
   const linkedSupplier = useMemo(() => {
     if (!selected?.supplier || selected.supplier === "—" || !selected.supplier.trim()) return null;
@@ -506,10 +322,10 @@ export default function InventoryWorkspace() {
       products: products.length,
       low,
       value: formatEuro(Math.round(value)),
-      movements: 7,
+      movements: movementsToday,
       orders: reorderList.length
     };
-  }, [products, reorderList.length]);
+  }, [products, reorderList.length, movementsToday]);
 
   const addToOrder = (productId: string) => {
     setOrderCart((prev) => ({ ...prev, [productId]: (prev[productId] ?? 0) + 1 }));
@@ -522,29 +338,33 @@ export default function InventoryWorkspace() {
       pushToast("Inserisci una quantità valida");
       return;
     }
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.id !== productId) return p;
-        let nextQty = p.qty;
-        if (kind === "carico") nextQty = p.qty + qty;
-        if (kind === "scarico") nextQty = Math.max(0, p.qty - qty);
-        if (kind === "rettifica") nextQty = qty;
-        const label =
-          kind === "carico" ? "Carico" : kind === "scarico" ? "Scarico" : "Rettifica";
-        return { ...p, qty: nextQty, lastMovement: todayMoveLabel(label) };
-      })
-    );
-    pushToast(
-      kind === "carico"
-        ? `Carico +${qty}`
-        : kind === "scarico"
-          ? `Scarico −${qty}`
-          : `Rettifica · qty ${qty}`
-    );
-    setMovementOpen(false);
+    const label =
+      kind === "carico" ? "Carico" : kind === "scarico" ? "Scarico" : "Rettifica";
+    void (async () => {
+      const result = await applyInventoryMove({
+        productId,
+        kind,
+        quantity: qty,
+        lastMovementLabel: todayMoveLabel(label)
+      });
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile registrare il movimento");
+        return;
+      }
+      await reloadInventory(productId);
+      pushToast(
+        kind === "carico"
+          ? `Carico +${qty}`
+          : kind === "scarico"
+            ? `Scarico −${qty}`
+            : `Rettifica · qty ${qty}`
+      );
+      setMovementOpen(false);
+    })();
   };
 
   const openMovement = (kind: MovementKind) => {
+    if (!selected) return;
     setMovementKind(kind);
     setMovementQty(kind === "rettifica" ? String(selected.qty) : "1");
     setMovementOpen(true);
@@ -565,9 +385,10 @@ export default function InventoryWorkspace() {
   };
 
   const openEdit = () => {
+    if (!selected) return;
     setProductForm({
       name: selected.name,
-      category: selected.category,
+      category: isProductCategory(selected.category) ? selected.category : "Creme",
       code: selected.code,
       supplier: selected.supplier,
       qty: String(selected.qty),
@@ -583,56 +404,76 @@ export default function InventoryWorkspace() {
       pushToast("Inserisci il nome prodotto");
       return;
     }
-    if (mode === "create") {
-      const id = `p-${Date.now()}`;
-      const product: DemoProduct = {
-        id,
+    void (async () => {
+      if (mode === "create") {
+        const qty = Math.max(0, Number(productForm.qty) || 0);
+        const minStock = Math.max(0, Number(productForm.minStock) || 0);
+        const avgCost = Math.max(0, Number(productForm.avgCost) || 0);
+        const code = productForm.code.trim() || `NEW-${Date.now().toString().slice(-4)}`;
+        const result = await createProductRemote({
+          name: productForm.name.trim(),
+          code,
+          categoryName: productForm.category,
+          categoryId: productForm.category.toLowerCase(),
+          supplier: productForm.supplier.trim() || "—",
+          quantity: qty,
+          minQuantity: minStock,
+          price: avgCost,
+          expiry: "—",
+          metaJson: productMetaJson({
+            barcode: `800${Date.now().toString().slice(-10)}`,
+            location: productForm.location.trim() || "—",
+            lot: "—",
+            lastMovement: todayMoveLabel("Nuovo"),
+            imageTone: "primary"
+          })
+        });
+        if (!result.ok) {
+          pushToast(result.message || "Impossibile creare il prodotto");
+          return;
+        }
+        await reloadInventory(result.data.id);
+        await reloadSuppliers();
+        setNewProductOpen(false);
+        pushToast("Prodotto creato");
+        return;
+      }
+
+      if (!selected) return;
+      const result = await updateProductRemote({
+        id: selected.id,
         name: productForm.name.trim(),
-        category: productForm.category,
-        code: productForm.code.trim() || `NEW-${Date.now().toString().slice(-4)}`,
-        barcode: `800${Date.now().toString().slice(-10)}`,
+        categoryName: productForm.category,
+        categoryId: productForm.category.toLowerCase(),
+        code: productForm.code.trim() || selected.code,
         supplier: productForm.supplier.trim() || "—",
-        qty: Math.max(0, Number(productForm.qty) || 0),
-        minStock: Math.max(0, Number(productForm.minStock) || 0),
-        location: productForm.location.trim() || "—",
-        lot: "—",
-        expiry: "—",
-        lastMovement: todayMoveLabel("Nuovo"),
-        avgCost: Math.max(0, Number(productForm.avgCost) || 0),
-        imageTone: "primary"
-      };
-      setProducts((prev) => [product, ...prev]);
-      setSelectedId(id);
-      setNewProductOpen(false);
-      pushToast("Prodotto creato");
-      return;
-    }
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === selected.id
-          ? {
-              ...p,
-              name: productForm.name.trim(),
-              category: productForm.category,
-              code: productForm.code.trim() || p.code,
-              supplier: productForm.supplier.trim() || "—",
-              qty: Math.max(0, Number(productForm.qty) || 0),
-              minStock: Math.max(0, Number(productForm.minStock) || 0),
-              location: productForm.location.trim() || "—",
-              avgCost: Math.max(0, Number(productForm.avgCost) || 0),
-              lastMovement: todayMoveLabel("Modifica")
-            }
-          : p
-      )
-    );
-    setEditOpen(false);
-    pushToast("Prodotto aggiornato");
+        quantity: Math.max(0, Number(productForm.qty) || 0),
+        minQuantity: Math.max(0, Number(productForm.minStock) || 0),
+        price: Math.max(0, Number(productForm.avgCost) || 0),
+        metaJson: productMetaJson({
+          barcode: selected.barcode,
+          location: productForm.location.trim() || "—",
+          lot: selected.lot,
+          lastMovement: todayMoveLabel("Modifica"),
+          imageTone: selected.imageTone
+        })
+      });
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile aggiornare il prodotto");
+        return;
+      }
+      await reloadInventory(selected.id);
+      await reloadSuppliers();
+      setEditOpen(false);
+      pushToast("Prodotto aggiornato");
+    })();
   };
 
   const onPickPhoto = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    if (!selected) return;
     if (!file.type.startsWith("image/")) {
       pushToast("Seleziona un'immagine valida");
       return;
@@ -641,46 +482,80 @@ export default function InventoryWorkspace() {
     reader.onload = () => {
       const url = typeof reader.result === "string" ? reader.result : null;
       if (!url) return;
-      setProducts((prev) =>
-        prev.map((p) => (p.id === selected.id ? { ...p, imageUrl: url } : p))
-      );
-      pushToast("Foto prodotto aggiornata");
+      void (async () => {
+        const result = await updateProductRemote({
+          id: selected.id,
+          photoUrl: url
+        });
+        if (!result.ok) {
+          pushToast(result.message || "Impossibile salvare la foto");
+          return;
+        }
+        await reloadInventory(selected.id);
+        pushToast("Foto prodotto aggiornata");
+      })();
     };
     reader.readAsDataURL(file);
   };
 
   const runConfirm = () => {
-    if (!confirmKind) return;
-    if (confirmKind === "duplicate") {
-      const id = `p-${Date.now()}`;
-      const copy: DemoProduct = {
-        ...selected,
-        id,
-        name: `${selected.name} (copia)`,
-        code: `${selected.code}-C`,
-        barcode: `${selected.barcode.slice(0, -1)}9`,
-        qty: 0,
-        lastMovement: todayMoveLabel("Duplica"),
-        imageUrl: selected.imageUrl ?? null
-      };
-      setProducts((prev) => [copy, ...prev]);
-      setSelectedId(id);
-      pushToast("Prodotto duplicato");
-    } else if (confirmKind === "delete") {
+    if (!confirmKind || !selected) return;
+    const kind = confirmKind;
+    setConfirmKind(null);
+    void (async () => {
+      if (kind === "duplicate") {
+        const result = await createProductRemote({
+          name: `${selected.name} (copia)`,
+          code: `${selected.code}-C`,
+          categoryName: selected.category,
+          categoryId: selected.category.toLowerCase(),
+          supplier: selected.supplier,
+          quantity: 0,
+          minQuantity: selected.minStock,
+          price: selected.avgCost,
+          expiry: selected.expiry,
+          photoUrl: selected.imageUrl ?? "",
+          metaJson: productMetaJson({
+            barcode: selected.barcode ? `${selected.barcode.slice(0, -1)}9` : "",
+            location: selected.location,
+            lot: selected.lot,
+            lastMovement: todayMoveLabel("Duplica"),
+            imageTone: selected.imageTone
+          })
+        });
+        if (!result.ok) {
+          pushToast(result.message || "Impossibile duplicare il prodotto");
+          return;
+        }
+        await reloadInventory(result.data.id);
+        await reloadSuppliers();
+        pushToast("Prodotto duplicato");
+        return;
+      }
+
       const removed = selected.id;
-      setProducts((prev) => {
-        const next = prev.filter((p) => p.id !== removed);
-        setSelectedId(next[0]?.id ?? "");
-        return next;
-      });
+      const result = await deleteProductRemote(removed);
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile eliminare il prodotto");
+        return;
+      }
       setOrderCart((prev) => {
         const { [removed]: _, ...rest } = prev;
         return rest;
       });
+      await reloadInventory();
+      await reloadSuppliers();
       pushToast("Prodotto eliminato");
-    }
-    setConfirmKind(null);
+    })();
   };
+
+  if (!loaded) {
+    return (
+      <div className="nb-inventoryWs" role="region" aria-label="Workspace Magazzino">
+        <p className="nb-ivEmpty">Caricamento magazzino…</p>
+      </div>
+    );
+  }
 
   if (!selected) {
     return (
@@ -698,7 +573,7 @@ export default function InventoryWorkspace() {
             <Boxes className="nb-ivCatsIcon" aria-hidden={true} />
             <div>
               <div className="nb-ivCatsTitle">Categorie</div>
-              <div className="nb-ivCatsSub">Magazzino · demo</div>
+              <div className="nb-ivCatsSub">Magazzino studio</div>
             </div>
           </div>
           <nav className="nb-ivCatList" aria-label="Categorie magazzino">
@@ -853,7 +728,7 @@ export default function InventoryWorkspace() {
               {filtered.length} prodotti
               {category !== "Tutti" ? ` · ${category}` : ""}
             </span>
-            <span className="nb-ivListMetaHint">Ricerca istantanea · demo</span>
+            <span className="nb-ivListMetaHint">Ricerca istantanea</span>
           </div>
 
           <ul className="nb-ivList" role="listbox" aria-label="Elenco prodotti">
@@ -1049,7 +924,7 @@ export default function InventoryWorkspace() {
             </button>
           </div>
 
-          <p className="nb-ivDetailHint">Magazzino pronto · azioni demo locali</p>
+          <p className="nb-ivDetailHint">Magazzino salvato in locale</p>
         </aside>
       </div>
 
@@ -1252,7 +1127,7 @@ export default function InventoryWorkspace() {
             aria-label={newProductOpen ? "Nuovo prodotto" : "Modifica prodotto"}
           >
             <h2 className="nb-dialogTitle">{newProductOpen ? "Nuovo prodotto" : "Modifica prodotto"}</h2>
-            <p className="nb-dialogSub">Catalogo magazzino · demo</p>
+            <p className="nb-dialogSub">Catalogo magazzino</p>
             <div className="nb-drawerRow2">
               <label className="nb-drawerField">
                 <span className="nb-drawerFieldLabel">Nome</span>
@@ -1404,11 +1279,21 @@ export default function InventoryWorkspace() {
                 onClick={() => {
                   const name = suppliers.find((s) => s.id === linkSupplierId)?.name;
                   if (!name) return;
-                  setProducts((prev) =>
-                    prev.map((p) => (p.id === selected.id ? { ...p, supplier: name } : p))
-                  );
-                  setLinkSupplierOpen(false);
-                  pushToast(`Fornitore collegato · ${name}`);
+                  const productId = selected.id;
+                  void (async () => {
+                    const result = await updateProductRemote({
+                      id: productId,
+                      supplier: name
+                    });
+                    if (!result.ok) {
+                      pushToast(result.message || "Impossibile collegare il fornitore");
+                      return;
+                    }
+                    await reloadInventory(productId);
+                    await reloadSuppliers();
+                    setLinkSupplierOpen(false);
+                    pushToast(`Fornitore collegato · ${name}`);
+                  })();
                 }}
               >
                 Collega
@@ -1433,7 +1318,7 @@ export default function InventoryWorkspace() {
             <p className="nb-dialogSub">
               {confirmKind === "duplicate"
                 ? `Verrà creata una copia di “${selected.name}”.`
-                : `“${selected.name}” verrà rimosso dal magazzino demo.`}
+                : `“${selected.name}” verrà rimosso dal magazzino.`}
             </p>
             <div className="nb-dialogActions">
               <button type="button" className="nb-ghostBtn" onClick={() => setConfirmKind(null)}>

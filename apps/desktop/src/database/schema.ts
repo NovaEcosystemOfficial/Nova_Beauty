@@ -1,10 +1,10 @@
 /**
- * Schema SQLite — creazione tabelle (Sprint 1–2).
+ * Schema SQLite — creazione tabelle (Sprint 1–B1).
  * Seed clienti demo via ClientService se tabella vuota.
  */
 
 /** Versione schema corrente (per future migration). */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 6;
 
 /**
  * DDL iniziale. `IF NOT EXISTS` rende l'init idempotente al riavvio.
@@ -114,7 +114,8 @@ CREATE TABLE IF NOT EXISTS products (
   unit TEXT NOT NULL DEFAULT 'pz',
   price REAL NOT NULL DEFAULT 0,
   expiry TEXT NOT NULL DEFAULT '',
-  photo_url TEXT NOT NULL DEFAULT ''
+  photo_url TEXT NOT NULL DEFAULT '',
+  meta_json TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS inventory_movements (
@@ -127,6 +128,20 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
   quantity REAL NOT NULL DEFAULT 0,
   note TEXT NOT NULL DEFAULT '',
   operator_name TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS suppliers (
+  id TEXT PRIMARY KEY NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  category TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'attivo',
+  contact TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  meta_json TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -183,6 +198,7 @@ export const DOMAIN_TABLES = [
   "categories",
   "products",
   "inventory_movements",
+  "suppliers",
   "settings",
   "center",
   "backups",

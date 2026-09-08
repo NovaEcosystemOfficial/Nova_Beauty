@@ -16,6 +16,44 @@ export type ProductData = EntityTimestamps & {
   price: number;
   expiry: string;
   photoUrl: string;
+  /** JSON: barcode, location, lot, lastMovement, imageTone */
+  metaJson: string;
+};
+
+export type ProductListQuery = {
+  search?: string;
+  category?: string;
+};
+
+export type ProductCreateInput = {
+  name: string;
+  code?: string;
+  categoryId?: string;
+  categoryName?: string;
+  supplier?: string;
+  quantity?: number;
+  minQuantity?: number;
+  unit?: string;
+  price?: number;
+  expiry?: string;
+  photoUrl?: string;
+  metaJson?: string;
+  id?: string;
+};
+
+export type ProductUpdateInput = Partial<Omit<ProductCreateInput, "id">> & {
+  id: string;
+};
+
+export type MovementKind = "carico" | "scarico" | "rettifica";
+
+export type InventoryMoveInput = {
+  productId: string;
+  kind: MovementKind;
+  quantity: number;
+  note?: string;
+  operatorName?: string;
+  lastMovementLabel?: string;
 };
 
 export class ProductModel {
@@ -33,6 +71,7 @@ export class ProductModel {
   readonly price: number;
   readonly expiry: string;
   readonly photoUrl: string;
+  readonly metaJson: string;
 
   constructor(data: ProductData) {
     this.id = data.id;
@@ -49,6 +88,7 @@ export class ProductModel {
     this.price = data.price;
     this.expiry = data.expiry;
     this.photoUrl = data.photoUrl;
+    this.metaJson = data.metaJson;
   }
 
   static fromMap(map: SqlMap): ProductModel {
@@ -66,7 +106,8 @@ export class ProductModel {
       unit: readString(map, "unit", "pz"),
       price: readNumber(map, "price"),
       expiry: readString(map, "expiry"),
-      photoUrl: readString(map, "photo_url", readString(map, "photoUrl"))
+      photoUrl: readString(map, "photo_url", readString(map, "photoUrl")),
+      metaJson: readString(map, "meta_json", readString(map, "metaJson", "{}"))
     });
   }
 
@@ -85,7 +126,28 @@ export class ProductModel {
       unit: this.unit,
       price: this.price,
       expiry: this.expiry,
-      photo_url: this.photoUrl
+      photo_url: this.photoUrl,
+      meta_json: this.metaJson || "{}"
+    };
+  }
+
+  toDto(): ProductData {
+    return {
+      id: this.id,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+      code: this.code,
+      name: this.name,
+      categoryId: this.categoryId,
+      categoryName: this.categoryName,
+      supplier: this.supplier,
+      quantity: this.quantity,
+      minQuantity: this.minQuantity,
+      unit: this.unit,
+      price: this.price,
+      expiry: this.expiry,
+      photoUrl: this.photoUrl,
+      metaJson: this.metaJson
     };
   }
 
@@ -104,7 +166,8 @@ export class ProductModel {
       unit: patch.unit ?? this.unit,
       price: patch.price ?? this.price,
       expiry: patch.expiry ?? this.expiry,
-      photoUrl: patch.photoUrl ?? this.photoUrl
+      photoUrl: patch.photoUrl ?? this.photoUrl,
+      metaJson: patch.metaJson ?? this.metaJson
     });
   }
 }

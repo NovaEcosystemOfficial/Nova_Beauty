@@ -1,7 +1,7 @@
 /**
  * DataEngine — facade di avvio del motore dati locale.
  *
- * Sprint 1–4: SQLite + repository. Clienti, Appuntamenti e Servizi via IPC.
+ * Sprint 1–B2: SQLite + repository. Clienti, Appuntamenti, Servizi, Magazzino, Fornitori via IPC.
  */
 import { DatabaseService } from "../database/DatabaseService";
 import { DOMAIN_TABLES } from "../database/schema";
@@ -10,6 +10,7 @@ import { ClientRepository } from "../repositories/ClientRepository";
 import { InventoryRepository } from "../repositories/InventoryRepository";
 import { ServiceRepository } from "../repositories/ServiceRepository";
 import { SettingsRepository } from "../repositories/SettingsRepository";
+import { SupplierRepository } from "../repositories/SupplierRepository";
 
 export type DataEngineStatus = {
   ready: boolean;
@@ -26,6 +27,7 @@ export class DataEngine {
   readonly inventory: InventoryRepository;
   readonly services: ServiceRepository;
   readonly settings: SettingsRepository;
+  readonly suppliers: SupplierRepository;
 
   private constructor() {
     this.clients = new ClientRepository();
@@ -33,6 +35,7 @@ export class DataEngine {
     this.inventory = new InventoryRepository();
     this.services = new ServiceRepository();
     this.settings = new SettingsRepository();
+    this.suppliers = new SupplierRepository();
   }
 
   static getInstance(): DataEngine {

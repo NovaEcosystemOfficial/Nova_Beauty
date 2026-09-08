@@ -53,7 +53,7 @@ export default function NewSupplierDrawer({
   onClose,
   onCreated,
   layer = 2,
-  subtitle = "Anagrafica completa · demo"
+  subtitle = "Anagrafica completa"
 }: NewSupplierDrawerProps) {
   const { createSupplier } = useDemoWorkflow();
   const [draft, setDraft] = useState(EMPTY);
@@ -68,12 +68,15 @@ export default function NewSupplierDrawer({
     <RightDrawer open={open} title="Nuovo Fornitore" subtitle={subtitle} onClose={onClose} layer={layer}>
       <form
         className="nb-drawerForm"
-        onSubmit={(e) => {
+          onSubmit={(e) => {
           e.preventDefault();
           if (!canSave) return;
-          const id = createSupplier(draft);
-          onCreated(id);
-          onClose();
+          void (async () => {
+            const id = await createSupplier(draft);
+            if (!id) return;
+            onCreated(id);
+            onClose();
+          })();
         }}
       >
         <Field label="Nome *">

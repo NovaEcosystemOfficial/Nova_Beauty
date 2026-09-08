@@ -86,6 +86,11 @@ export function applyMigrations(db: Database.Database): void {
   // Sprint 4 — servizi reali
   addColumnIfMissing(db, "services", "meta_json", "TEXT NOT NULL DEFAULT '{}'");
 
+  // B1 — magazzino persistente
+  addColumnIfMissing(db, "products", "meta_json", "TEXT NOT NULL DEFAULT '{}'");
+
+  // B2 — fornitori persistenti (CREATE TABLE IF NOT EXISTS è in schema.ts)
+
   db.prepare(
     `INSERT INTO schema_meta (key, value) VALUES ('schema_version', ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`

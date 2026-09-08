@@ -1,5 +1,5 @@
 /**
- * Preload — bridge renderer → IPC (Client / Appointment / Service repositories).
+ * Preload — bridge renderer → IPC (Client / Appointment / Service / Inventory).
  */
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -31,10 +31,30 @@ const SERVICE_CHANNELS = [
   "nb:services:delete"
 ] as const;
 
+const INVENTORY_CHANNELS = [
+  "nb:inventory:list",
+  "nb:inventory:get",
+  "nb:inventory:create",
+  "nb:inventory:update",
+  "nb:inventory:delete",
+  "nb:inventory:movements",
+  "nb:inventory:move"
+] as const;
+
+const SUPPLIER_CHANNELS = [
+  "nb:suppliers:list",
+  "nb:suppliers:get",
+  "nb:suppliers:create",
+  "nb:suppliers:update",
+  "nb:suppliers:delete"
+] as const;
+
 const ALLOWED = new Set<string>([
   ...APPOINTMENT_CHANNELS,
   ...CLIENT_CHANNELS,
-  ...SERVICE_CHANNELS
+  ...SERVICE_CHANNELS,
+  ...INVENTORY_CHANNELS,
+  ...SUPPLIER_CHANNELS
 ]);
 
 const clientsApi = {
@@ -76,6 +96,36 @@ const servicesApi = {
     ipcRenderer.invoke("nb:services:delete", id)
 };
 
+const inventoryApi = {
+  list: (query?: unknown): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:inventory:list", query ?? {}),
+  get: (id: string): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:inventory:get", id),
+  create: (input: unknown): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:inventory:create", input),
+  update: (input: unknown): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:inventory:update", input),
+  delete: (id: string): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:inventory:delete", id),
+  movements: (): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:inventory:movements"),
+  move: (input: unknown): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:inventory:move", input)
+};
+
+const suppliersApi = {
+  list: (query?: unknown): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:suppliers:list", query ?? {}),
+  get: (id: string): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:suppliers:get", id),
+  create: (input: unknown): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:suppliers:create", input),
+  update: (input: unknown): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:suppliers:update", input),
+  delete: (id: string): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:suppliers:delete", id)
+};
+
 function invokeLocal(channel: string, ...args: unknown[]): Promise<unknown> {
   if (!ALLOWED.has(channel)) {
     return Promise.reject(new Error(`Canale IPC non consentito: ${channel}`));
@@ -87,15 +137,19 @@ try {
   contextBridge.exposeInMainWorld("novaBeauty", {
     clients: clientsApi,
     appointments: appointmentsApi,
-    services: servicesApi
+    services: servicesApi,
+    inventory: inventoryApi,
+    suppliers: suppliersApi
   });
   contextBridge.exposeInMainWorld("nbLocal", {
     invoke: invokeLocal,
     appointments: appointmentsApi,
     clients: clientsApi,
-    services: servicesApi
+    services: servicesApi,
+    inventory: inventoryApi,
+    suppliers: suppliersApi
   });
-  console.info("[NovaBeauty preload] bridge esposto (novaBeauty + nbLocal + services)");
+  console.info("[NovaBeauty preload] bridge esposto (novaBeauty + nbLocal + suppliers)");
 } catch (error) {
   console.error("[NovaBeauty preload] exposeInMainWorld fallito:", error);
 }

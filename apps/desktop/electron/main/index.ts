@@ -4,13 +4,19 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerAppointmentIpcHandlers } from "./appointmentIpc";
 import { registerClientIpcHandlers } from "./clientIpc";
+import { registerInventoryIpcHandlers } from "./inventoryIpc";
 import { registerServiceIpcHandlers } from "./serviceIpc";
+import { registerSupplierIpcHandlers } from "./supplierIpc";
 import { AppointmentService } from "../../src/services/AppointmentService";
 import { firestoreAppointmentSyncHooks } from "../../src/services/appointmentSyncHooks";
 import { ClientService } from "../../src/services/ClientService";
 import { firestoreClientSyncHooks } from "../../src/services/clientSyncHooks";
+import { InventoryService } from "../../src/services/InventoryService";
+import { firestoreInventorySyncHooks } from "../../src/services/inventorySyncHooks";
 import { ServiceService } from "../../src/services/ServiceService";
 import { firestoreServiceSyncHooks } from "../../src/services/serviceSyncHooks";
+import { SupplierService } from "../../src/services/SupplierService";
+import { firestoreSupplierSyncHooks } from "../../src/services/supplierSyncHooks";
 import { DataEngine } from "../../src/services/DataEngine";
 
 function mainDir(): string {
@@ -49,10 +55,14 @@ function bootstrapLocalDataEngine(): void {
     engine.clients.setSyncHooks(firestoreClientSyncHooks);
     engine.appointments.setSyncHooks(firestoreAppointmentSyncHooks);
     engine.services.setSyncHooks(firestoreServiceSyncHooks);
+    engine.inventory.setSyncHooks(firestoreInventorySyncHooks);
+    engine.suppliers.setSyncHooks(firestoreSupplierSyncHooks);
 
     const seededClients = ClientService.getInstance().ensureDemoSeed();
     const seededAppts = AppointmentService.getInstance().ensureDemoSeed();
     const seededServices = ServiceService.getInstance().ensureDemoSeed();
+    const seededProducts = InventoryService.getInstance().ensureDemoSeed();
+    const seededSuppliers = SupplierService.getInstance().ensureDemoSeed();
     engineReady = status.ready;
 
     if (status.ready) {
@@ -60,7 +70,9 @@ function bootstrapLocalDataEngine(): void {
         `[NovaBeauty] DataEngine ready · ${status.tables.length}/${status.expectedTables.length} tables · ${status.dbPath}` +
           (seededClients > 0 ? ` · seeded ${seededClients} clients` : "") +
           (seededAppts > 0 ? ` · seeded ${seededAppts} appointments` : "") +
-          (seededServices > 0 ? ` · seeded ${seededServices} services` : "")
+          (seededServices > 0 ? ` · seeded ${seededServices} services` : "") +
+          (seededProducts > 0 ? ` · seeded ${seededProducts} products` : "") +
+          (seededSuppliers > 0 ? ` · seeded ${seededSuppliers} suppliers` : "")
       );
     }
   } catch (error) {
@@ -71,8 +83,10 @@ function bootstrapLocalDataEngine(): void {
     registerClientIpcHandlers();
     registerAppointmentIpcHandlers();
     registerServiceIpcHandlers();
+    registerInventoryIpcHandlers();
+    registerSupplierIpcHandlers();
     console.info(
-      `[NovaBeauty] IPC registrato (appointments + clients + services)` +
+      `[NovaBeauty] IPC registrato (appointments + clients + services + inventory + suppliers)` +
         (engineReady ? "" : " · DB non ready: i create restituiranno l'errore repository")
     );
   } catch (error) {

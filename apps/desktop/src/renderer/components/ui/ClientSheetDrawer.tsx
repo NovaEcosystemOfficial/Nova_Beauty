@@ -101,10 +101,6 @@ export default function ClientSheetDrawer({
               <dt>Spesa totale</dt>
               <dd>€{client.totalSpent}</dd>
             </div>
-            <div>
-              <dt>Punti fidelity</dt>
-              <dd>{client.fidelityPoints}</dd>
-            </div>
           </dl>
           {client.notes ? <p className="nb-clientSheetNotes">{client.notes}</p> : null}
         </Section>
@@ -150,7 +146,6 @@ export default function ClientSheetDrawer({
           <ul className="nb-clientSheetList">
             <li>Ultimo pagamento · €{Math.min(client.totalSpent, 95)} · Carta</li>
             <li>Saldo aperto · €0</li>
-            <li>Fidelity · {client.fidelityPoints} punti</li>
           </ul>
         </Section>
 

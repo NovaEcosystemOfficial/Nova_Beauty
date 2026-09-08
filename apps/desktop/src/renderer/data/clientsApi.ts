@@ -64,7 +64,6 @@ export type WorkflowClientShape = {
   lastTreatment: string;
   nextAppointment: string;
   totalSpent: number;
-  fidelityPoints: number;
   tags: string[];
   diaryPlaceholders: string[];
   historyLines: string[];
@@ -99,7 +98,6 @@ export function dtoToWorkflowShape(dto: ClientData): WorkflowClientShape {
     lastTreatment: String(profile.lastTreatment ?? "—"),
     nextAppointment: String(profile.nextAppointment ?? "—"),
     totalSpent: Number(profile.totalSpent ?? 0),
-    fidelityPoints: Number(profile.fidelityPoints ?? 0),
     tags: Array.isArray(profile.tags) ? (profile.tags as string[]) : [],
     diaryPlaceholders: Array.isArray(profile.diaryPlaceholders)
       ? (profile.diaryPlaceholders as string[])

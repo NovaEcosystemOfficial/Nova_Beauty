@@ -1,7 +1,6 @@
 import {
   Calendar,
   Camera,
-  Gift,
   Mail,
   MessageSquare,
   Phone,
@@ -370,10 +369,6 @@ export default function ClientsWorkspace() {
             <span className="nb-cwFieldLabel">Totale speso</span>
             <span className="nb-cwFieldValue strong">€{selected.totalSpent}</span>
           </div>
-          <div className="nb-cwField">
-            <span className="nb-cwFieldLabel">Fidelity</span>
-            <span className="nb-cwFieldValue accent">{selected.fidelityPoints} pt</span>
-          </div>
         </div>
 
         <div className="nb-cwNotes">
@@ -422,21 +417,6 @@ export default function ClientsWorkspace() {
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="nb-cwBlock">
-            <div className="nb-cwBlockHead">
-              <Gift className="nb-cwBlockIcon" aria-hidden={true} />
-              Fidelity
-            </div>
-            <p className="nb-cwBlockText">
-              {selected.fidelityPoints} punti · livello{" "}
-              {selected.fidelityPoints >= 200
-                ? "Gold"
-                : selected.fidelityPoints >= 80
-                  ? "Silver"
-                  : "Starter"}
-            </p>
           </div>
         </div>
 

@@ -264,7 +264,7 @@ export default function SuppliersWorkspace() {
 
           <div className="nb-spListMeta">
             <span>{filtered.length} fornitori</span>
-            <span className="nb-spListMetaHint">Collegato a Magazzino · demo</span>
+            <span className="nb-spListMetaHint">Collegato a Magazzino</span>
           </div>
         </div>
 
@@ -444,7 +444,9 @@ export default function SuppliersWorkspace() {
           <button
             type="button"
             className="nb-spAction warn"
-            onClick={() => toggleSupplierStatus(selected.id)}
+            onClick={() => {
+              void toggleSupplierStatus(selected.id);
+            }}
           >
             {selected.status === "attivo" ? (
               <EyeOff className="nb-spActionIcon" aria-hidden={true} />
@@ -531,8 +533,10 @@ export default function SuppliersWorkspace() {
               pushToast("Inserisci il nome fornitore");
               return;
             }
-            updateSupplier(selected.id, editDraft);
-            setEditOpen(false);
+            void (async () => {
+              const ok = await updateSupplier(selected.id, editDraft);
+              if (ok) setEditOpen(false);
+            })();
           }}
         />
       ) : null}
@@ -548,7 +552,7 @@ export default function SuppliersWorkspace() {
           <div className="nb-dialogCard" role="dialog" aria-modal="true" aria-label="Elimina fornitore">
             <h2 className="nb-dialogTitle">Eliminare il fornitore?</h2>
             <p className="nb-dialogSub">
-              “{selected.name}” verrà rimosso dall&apos;anagrafica demo. I prodotti Magazzino restano.
+              “{selected.name}” verrà rimosso dall&apos;anagrafica. I prodotti Magazzino restano.
             </p>
             <div className="nb-dialogActions">
               <button type="button" className="nb-ghostBtn" onClick={() => setDeleteOpen(false)}>
@@ -559,8 +563,10 @@ export default function SuppliersWorkspace() {
                 className="nb-newBtn nb-ivConfirmDanger"
                 onClick={() => {
                   const id = selected.id;
-                  setDeleteOpen(false);
-                  deleteSupplier(id);
+                  void (async () => {
+                    const ok = await deleteSupplier(id);
+                    if (ok) setDeleteOpen(false);
+                  })();
                 }}
               >
                 Elimina
@@ -594,7 +600,7 @@ function EditSupplierDialog({
         aria-label="Modifica fornitore"
       >
         <h2 className="nb-dialogTitle">Modifica fornitore</h2>
-        <p className="nb-dialogSub">Aggiorna anagrafica · demo</p>
+        <p className="nb-dialogSub">Aggiorna anagrafica</p>
         <div className="nb-spEditForm">
           <label className="nb-drawerField">
             <span className="nb-drawerFieldLabel">Nome</span>

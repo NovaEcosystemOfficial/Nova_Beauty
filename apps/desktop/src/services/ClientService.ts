@@ -19,7 +19,6 @@ export type ClientProfileExtras = {
   lastTreatment?: string;
   nextAppointment?: string;
   totalSpent?: number;
-  fidelityPoints?: number;
   tags?: string[];
   diaryPlaceholders?: string[];
   historyLines?: string[];
@@ -53,7 +52,6 @@ const DEMO_SEED: Array<{
       lastTreatment: "Pulizia viso deep",
       nextAppointment: "Oggi · 09:00",
       totalSpent: 1240,
-      fidelityPoints: 180,
       tags: ["VIP", "Viso"],
       diaryPlaceholders: ["Before/After viso", "Mappa zone", "Follow-up"],
       historyLines: ["Pulizia viso · 2 ago", "Peeling · 15 giu", "Idratazione · 2 mag"]
@@ -74,7 +72,6 @@ const DEMO_SEED: Array<{
       lastTreatment: "Massaggio rilassante",
       nextAppointment: "Oggi · 11:30",
       totalSpent: 860,
-      fidelityPoints: 95,
       tags: ["Massaggi"],
       diaryPlaceholders: ["Zona schiena", "Preferenze olio"],
       historyLines: ["Massaggio · 28 lug", "Pressoterapia · 10 giu"]
@@ -95,7 +92,6 @@ const DEMO_SEED: Array<{
       lastTreatment: "Epilazione gambe",
       nextAppointment: "Oggi · 14:15",
       totalSpent: 620,
-      fidelityPoints: 70,
       tags: ["Epilazione"],
       diaryPlaceholders: ["Zone trattate"],
       historyLines: ["Epilazione · 20 lug", "Epilazione · 18 giu"]
@@ -116,7 +112,6 @@ const DEMO_SEED: Array<{
       lastTreatment: "Trucco permanente",
       nextAppointment: "Oggi · 16:00",
       totalSpent: 1890,
-      fidelityPoints: 240,
       tags: ["VIP", "PMU"],
       diaryPlaceholders: ["Sopracciglia", "Pigmento"],
       historyLines: ["PMU · 15 lug", "PMU · 20 mag"]
@@ -137,7 +132,6 @@ const DEMO_SEED: Array<{
       lastTreatment: "—",
       nextAppointment: "8 ago · 10:00",
       totalSpent: 0,
-      fidelityPoints: 0,
       tags: ["Nuova"],
       diaryPlaceholders: ["Anamnesi"],
       historyLines: []
@@ -158,7 +152,6 @@ const DEMO_SEED: Array<{
       lastTreatment: "Manicure spa",
       nextAppointment: "Non pianificato",
       totalSpent: 410,
-      fidelityPoints: 40,
       tags: ["Da richiamare"],
       diaryPlaceholders: [],
       historyLines: ["Manicure · 12 apr"]
@@ -179,7 +172,6 @@ const DEMO_SEED: Array<{
       lastTreatment: "Pressoterapia",
       nextAppointment: "12 ago · 15:30",
       totalSpent: 980,
-      fidelityPoints: 110,
       tags: ["Pacchetto"],
       diaryPlaceholders: ["Gambe", "Circonferenze"],
       historyLines: ["Pressoterapia · 30 lug", "Pressoterapia · 16 lug"]
@@ -200,7 +192,6 @@ const DEMO_SEED: Array<{
       lastTreatment: "Peeling enzimatico",
       nextAppointment: "19 ago · 11:00",
       totalSpent: 745,
-      fidelityPoints: 85,
       tags: ["Viso", "Bio"],
       diaryPlaceholders: ["Texture pelle"],
       historyLines: ["Peeling · 25 lug", "Pulizia · 1 giu"]

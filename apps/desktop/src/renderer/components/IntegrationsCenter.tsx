@@ -136,15 +136,6 @@ const MARKETPLACE_SEED: MarketplaceMod[] = [
     icon: Gift
   },
   {
-    id: "fid",
-    name: "Fidelity",
-    description: "Punti e premi fedeltà.",
-    category: "Vendite",
-    version: "2.0.4",
-    installed: true,
-    icon: Heart
-  },
-  {
     id: "sms",
     name: "SMS",
     description: "Promemoria via SMS.",
@@ -318,7 +309,7 @@ const LOGS_SEED: EcoLog[] = [
     id: "l7",
     time: "14:22",
     date: "2026-08-04",
-    text: "Modulo Fidelity aggiornato a 2.0.4",
+    text: "Modulo Gift Card aggiornato a 1.2.0",
     type: "sistema",
     user: "Marketplace",
     tone: "lavender"

@@ -3,7 +3,6 @@ import {
   Clock,
   CreditCard,
   DoorOpen,
-  Gift,
   ImageIcon,
   Mail,
   Pencil,
@@ -17,7 +16,7 @@ import clsx from "clsx";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentType, type Dispatch, type SetStateAction } from "react";
 import { useDemoWorkflow } from "../demo/DemoWorkflowContext";
 
-type StudioSection = "info" | "team" | "cabine" | "orari" | "pagamenti" | "fidelity";
+type StudioSection = "info" | "team" | "cabine" | "orari" | "pagamenti";
 
 type OperatorStatus = "online" | "offline" | "ferie";
 type CabinStatus = "libera" | "occupata" | "fuori_servizio";
@@ -97,8 +96,7 @@ const MENU: Array<{
   { id: "team", label: "Team", icon: Users },
   { id: "cabine", label: "Cabine", icon: DoorOpen },
   { id: "orari", label: "Orari", icon: Clock },
-  { id: "pagamenti", label: "Pagamenti", icon: CreditCard },
-  { id: "fidelity", label: "Fidelity", icon: Gift }
+  { id: "pagamenti", label: "Pagamenti", icon: CreditCard }
 ];
 
 const INITIAL_OPERATORS: DemoOperator[] = [
@@ -363,15 +361,6 @@ export default function StudioWorkspace() {
     fiscal: false
   });
 
-  const [pointsEnabled, setPointsEnabled] = useState(true);
-  const [euroPerPoint, setEuroPerPoint] = useState("10");
-  const [pointsPerEuro, setPointsPerEuro] = useState("1");
-  const [threshold, setThreshold] = useState("100");
-  const [bonusSignup, setBonusSignup] = useState("50");
-  const [rewards, setRewards] = useState(
-    "100 pt · sconto €5\n250 pt · trattamento viso\n500 pt · pacchetto corpo"
-  );
-
   useEffect(() => {
     setProfile((p) => ({ ...p, businessName: studioName }));
   }, [studioName]);
@@ -486,23 +475,6 @@ export default function StudioWorkspace() {
             onSave={() => pushToast("Configurazione pagamenti salvata")}
           />
         ) : null}
-        {section === "fidelity" ? (
-          <FidelitySection
-            pointsEnabled={pointsEnabled}
-            setPointsEnabled={setPointsEnabled}
-            euroPerPoint={euroPerPoint}
-            setEuroPerPoint={setEuroPerPoint}
-            pointsPerEuro={pointsPerEuro}
-            setPointsPerEuro={setPointsPerEuro}
-            threshold={threshold}
-            setThreshold={setThreshold}
-            bonusSignup={bonusSignup}
-            setBonusSignup={setBonusSignup}
-            rewards={rewards}
-            setRewards={setRewards}
-            onSave={() => pushToast("Programma fidelity salvato")}
-          />
-        ) : null}
       </section>
 
       <aside className="nb-stAside">
@@ -519,7 +491,6 @@ export default function StudioWorkspace() {
             ferieCount={ferieCount}
             cabinSummary={cabinSummary}
             agendaSync={agendaSync}
-            pointsEnabled={pointsEnabled}
           />
         )}
       </aside>
@@ -1256,112 +1227,6 @@ function PaymentsSection({
   );
 }
 
-function FidelitySection({
-  pointsEnabled,
-  setPointsEnabled,
-  euroPerPoint,
-  setEuroPerPoint,
-  pointsPerEuro,
-  setPointsPerEuro,
-  threshold,
-  setThreshold,
-  bonusSignup,
-  setBonusSignup,
-  rewards,
-  setRewards,
-  onSave
-}: {
-  pointsEnabled: boolean;
-  setPointsEnabled: (v: boolean) => void;
-  euroPerPoint: string;
-  setEuroPerPoint: (v: string) => void;
-  pointsPerEuro: string;
-  setPointsPerEuro: (v: string) => void;
-  threshold: string;
-  setThreshold: (v: string) => void;
-  bonusSignup: string;
-  setBonusSignup: (v: string) => void;
-  rewards: string;
-  setRewards: (v: string) => void;
-  onSave: () => void;
-}) {
-  return (
-    <div className="nb-stConfig">
-      <div className="nb-stTeamToolbar">
-        <div>
-          <h2 className="nb-stSectionTitle">Fidelity</h2>
-          <p className="nb-stSectionSub">Punti, premi, soglie e bonus</p>
-        </div>
-        <button type="button" className="nb-newBtn nb-stNewBtn" onClick={onSave}>
-          Salva fidelity
-        </button>
-      </div>
-
-      <div className="nb-stConfigCard">
-        <div className="nb-stConfigCardTitle">Configurazione punti</div>
-        <label className="nb-stCheck">
-          <input
-            type="checkbox"
-            checked={pointsEnabled}
-            onChange={(e) => setPointsEnabled(e.target.checked)}
-          />
-          <span>Programma punti attivo</span>
-        </label>
-        <div className="nb-stConfigGrid">
-          <label className="nb-drawerField">
-            <span className="nb-drawerFieldLabel">Euro per 1 punto</span>
-            <input
-              className="nb-drawerInput"
-              value={euroPerPoint}
-              disabled={!pointsEnabled}
-              onChange={(e) => setEuroPerPoint(e.target.value)}
-            />
-          </label>
-          <label className="nb-drawerField">
-            <span className="nb-drawerFieldLabel">Punti per euro speso</span>
-            <input
-              className="nb-drawerInput"
-              value={pointsPerEuro}
-              disabled={!pointsEnabled}
-              onChange={(e) => setPointsPerEuro(e.target.value)}
-            />
-          </label>
-          <label className="nb-drawerField">
-            <span className="nb-drawerFieldLabel">Soglia riscatto (pt)</span>
-            <input
-              className="nb-drawerInput"
-              value={threshold}
-              disabled={!pointsEnabled}
-              onChange={(e) => setThreshold(e.target.value)}
-            />
-          </label>
-          <label className="nb-drawerField">
-            <span className="nb-drawerFieldLabel">Bonus iscrizione (pt)</span>
-            <input
-              className="nb-drawerInput"
-              value={bonusSignup}
-              disabled={!pointsEnabled}
-              onChange={(e) => setBonusSignup(e.target.value)}
-            />
-          </label>
-        </div>
-      </div>
-
-      <label className="nb-drawerField">
-        <span className="nb-drawerFieldLabel">Premi riscattabili</span>
-        <textarea
-          className="nb-drawerTextarea"
-          rows={5}
-          value={rewards}
-          disabled={!pointsEnabled}
-          onChange={(e) => setRewards(e.target.value)}
-          placeholder="Elenco premi · un premio per riga"
-        />
-      </label>
-    </div>
-  );
-}
-
 function StudioAsideContext({
   section,
   operatorsCount,
@@ -1369,8 +1234,7 @@ function StudioAsideContext({
   onlineCount,
   ferieCount,
   cabinSummary,
-  agendaSync,
-  pointsEnabled
+  agendaSync
 }: {
   section: StudioSection;
   operatorsCount: number;
@@ -1379,7 +1243,6 @@ function StudioAsideContext({
   ferieCount: number;
   cabinSummary: { libera: number; occupata: number; fuori: number };
   agendaSync: boolean;
-  pointsEnabled: boolean;
 }) {
   const copy: Record<StudioSection, { title: string; body: string }> = {
     info: {
@@ -1403,12 +1266,6 @@ function StudioAsideContext({
     pagamenti: {
       title: "Pagamenti",
       body: "Metodi, IVA e documenti fiscali del centro."
-    },
-    fidelity: {
-      title: "Fidelity",
-      body: pointsEnabled
-        ? "Programma punti attivo · premi e soglie configurabili."
-        : "Programma punti disattivato."
     }
   };
 
