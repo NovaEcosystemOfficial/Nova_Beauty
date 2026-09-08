@@ -61,10 +61,10 @@ export default function NewClientWizard() {
   const patch = (partial: Partial<NewClientDraft>) =>
     setDraft((d) => ({ ...d, ...partial }));
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!canCreate) return;
-    createClient(draft);
-    closeNewClientWizard();
+    const id = await createClient(draft);
+    if (id) closeNewClientWizard();
   };
 
   return (
@@ -335,7 +335,7 @@ export default function NewClientWizard() {
               type="button"
               className="nb-newBtn"
               disabled={!canCreate}
-              onClick={handleCreate}
+              onClick={() => void handleCreate()}
             >
               Crea Cliente
             </button>

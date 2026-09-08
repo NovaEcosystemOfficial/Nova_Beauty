@@ -14,8 +14,10 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useMemo, useState } from "react";
+import type { AppointmentSort } from "../../models/Appointment";
 import {
   useDemoWorkflow,
+  type AppointmentEditDraft,
   type ApptStatus,
   type WorkflowAppointment
 } from "../demo/DemoWorkflowContext";
@@ -23,6 +25,13 @@ import ClientSheetDrawer from "./ui/ClientSheetDrawer";
 
 type AgendaView = "giorno" | "settimana";
 type DemoAppointment = WorkflowAppointment;
+
+const SORT_OPTIONS: Array<{ key: AppointmentSort; label: string }> = [
+  { key: "date_asc", label: "Data" },
+  { key: "time_asc", label: "Ora" },
+  { key: "client_asc", label: "Cliente" },
+  { key: "operator_asc", label: "Operatore" }
+];
 
 const DAY_START = 8 * 60;
 const DAY_END = 20 * 60;
@@ -129,7 +138,9 @@ export default function AgendaWorkspace() {
     openNewAppointment,
     openAppointmentDetail,
     getClient,
-    pushToast
+    deleteAppointment,
+    updateAppointment,
+    reloadAppointments
   } = useDemoWorkflow();
 
   const [view, setView] = useState<AgendaView>("giorno");
@@ -138,9 +149,14 @@ export default function AgendaWorkspace() {
   const [statusFilter, setStatusFilter] = useState<"tutti" | ApptStatus>("tutti");
   const [operatorFilter, setOperatorFilter] = useState("tutti");
   const [serviceFilter, setServiceFilter] = useState("tutti");
+  const [sort, setSort] = useState<AppointmentSort>("date_asc");
   const [selectedId, setSelectedId] = useState<string | null>("a1");
   const [clientSheetId, setClientSheetId] = useState<string | null>(null);
   const [calendarKey, setCalendarKey] = useState(0);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState<AppointmentEditDraft | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const focusDate = useMemo(() => addDays(BASE_DATE, focusOffset), [focusOffset]);
   const dateLabel = formatFullDate(focusDate);
@@ -164,7 +180,7 @@ export default function AgendaWorkspace() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return allAppointments.filter((a) => {
+    const list = allAppointments.filter((a) => {
       if (statusFilter !== "tutti" && a.status !== statusFilter) return false;
       if (operatorFilter !== "tutti" && a.operator !== operatorFilter) return false;
       if (serviceFilter !== "tutti" && a.service !== serviceFilter) return false;
@@ -175,10 +191,31 @@ export default function AgendaWorkspace() {
       if (!q) return true;
       return (
         a.client.toLowerCase().includes(q) ||
+        a.operator.toLowerCase().includes(q) ||
+        a.dateLabel.toLowerCase().includes(q) ||
+        a.status.toLowerCase().includes(q) ||
         a.service.toLowerCase().includes(q) ||
         a.phone.toLowerCase().includes(q)
       );
     });
+
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      switch (sort) {
+        case "time_asc":
+          return a.startMin - b.startMin || a.dayOffset - b.dayOffset;
+        case "client_asc":
+          return a.client.localeCompare(b.client, "it") || a.startMin - b.startMin;
+        case "operator_asc":
+          return a.operator.localeCompare(b.operator, "it") || a.startMin - b.startMin;
+        case "date_desc":
+          return b.dayOffset - a.dayOffset || b.startMin - a.startMin;
+        case "date_asc":
+        default:
+          return a.dayOffset - b.dayOffset || a.startMin - b.startMin;
+      }
+    });
+    return sorted;
   }, [
     allAppointments,
     query,
@@ -187,7 +224,8 @@ export default function AgendaWorkspace() {
     serviceFilter,
     view,
     focusOffset,
-    weekStart
+    weekStart,
+    sort
   ]);
 
   const selected =
@@ -236,6 +274,52 @@ export default function AgendaWorkspace() {
 
   const handleSelect = (id: string) => {
     setSelectedId(id);
+  };
+
+  const openEdit = () => {
+    if (!selected) return;
+    setEditDraft({
+      clientId: selected.clientId,
+      client: selected.client,
+      phone: selected.phone,
+      email: selected.email,
+      operator: selected.operator,
+      cabin: selected.cabin,
+      service: selected.service,
+      dateLabel: selected.dateLabel,
+      timeLabel: selected.timeLabel,
+      durationMin: selected.durationMin,
+      price: selected.price,
+      notes: selected.notes,
+      status: selected.status,
+      dayOffset: selected.dayOffset
+    });
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    if (!selected || !editDraft || busy) return;
+    setBusy(true);
+    const ok = await updateAppointment(selected.id, editDraft);
+    setBusy(false);
+    if (ok) setEditOpen(false);
+  };
+
+  const confirmDelete = async () => {
+    if (!selected || busy) return;
+    setBusy(true);
+    const id = selected.id;
+    const ok = await deleteAppointment(id);
+    setBusy(false);
+    if (ok) {
+      setDeleteOpen(false);
+      setSelectedId(null);
+    }
+  };
+
+  const onSortChange = (next: AppointmentSort) => {
+    setSort(next);
+    void reloadAppointments({ sort: next });
   };
 
   const sheetClient = clientSheetId ? getClient(clientSheetId) ?? null : null;
@@ -346,6 +430,22 @@ export default function AgendaWorkspace() {
               <option value="Trucco permanente">PMU</option>
             </select>
           </label>
+
+          <label className="nb-agSelectWrap">
+            <span className="nb-agSelectLabel">Ordina</span>
+            <select
+              className="nb-agSelect"
+              value={sort}
+              onChange={(e) => onSortChange(e.target.value as AppointmentSort)}
+              aria-label="Ordina appuntamenti"
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.key} value={opt.key}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
       </div>
 
@@ -387,7 +487,8 @@ export default function AgendaWorkspace() {
                   openCompleteDialog();
                 }}
                 onNewAppointment={() => openNewAppointment(selected.clientId)}
-                onDelete={() => pushToast("Elimina · demo")}
+                onEdit={openEdit}
+                onDelete={() => setDeleteOpen(true)}
               />
             ) : (
               <div className="nb-agInspectorEmpty">
@@ -418,6 +519,127 @@ export default function AgendaWorkspace() {
         appointments={allAppointments}
         onClose={() => setClientSheetId(null)}
       />
+
+      {editOpen && editDraft && selected ? (
+        <div className="nb-dialogRoot isOpen" role="presentation">
+          <button
+            type="button"
+            className="nb-dialogBackdrop"
+            aria-label="Annulla"
+            onClick={() => setEditOpen(false)}
+          />
+          <div
+            className="nb-dialogCard"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Modifica appuntamento"
+          >
+            <h2 className="nb-dialogTitle">Modifica appuntamento</h2>
+            <p className="nb-dialogSub">{selected.client}</p>
+            <div className="nb-drawerForm">
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Ora</span>
+                <input
+                  className="nb-drawerInput"
+                  value={editDraft.timeLabel}
+                  onChange={(e) => setEditDraft({ ...editDraft, timeLabel: e.target.value })}
+                />
+              </label>
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Operatore</span>
+                <select
+                  className="nb-drawerInput"
+                  value={editDraft.operator}
+                  onChange={(e) => setEditDraft({ ...editDraft, operator: e.target.value })}
+                >
+                  <option value="Fabio">Fabio</option>
+                  <option value="Laura">Laura</option>
+                </select>
+              </label>
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Cabina</span>
+                <input
+                  className="nb-drawerInput"
+                  value={editDraft.cabin}
+                  onChange={(e) => setEditDraft({ ...editDraft, cabin: e.target.value })}
+                />
+              </label>
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Stato</span>
+                <select
+                  className="nb-drawerInput"
+                  value={editDraft.status}
+                  onChange={(e) =>
+                    setEditDraft({ ...editDraft, status: e.target.value as ApptStatus })
+                  }
+                >
+                  <option value="confermato">Confermato</option>
+                  <option value="da_confermare">Da confermare</option>
+                  <option value="completato">Completato</option>
+                  <option value="annullato">Annullato</option>
+                </select>
+              </label>
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Note</span>
+                <textarea
+                  className="nb-drawerInput"
+                  rows={3}
+                  value={editDraft.notes}
+                  onChange={(e) => setEditDraft({ ...editDraft, notes: e.target.value })}
+                />
+              </label>
+            </div>
+            <div className="nb-dialogActions">
+              <button type="button" className="nb-ghostBtn" onClick={() => setEditOpen(false)}>
+                Annulla
+              </button>
+              <button
+                type="button"
+                className="nb-newBtn"
+                disabled={busy}
+                onClick={() => void saveEdit()}
+              >
+                Salva
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteOpen && selected ? (
+        <div className="nb-dialogRoot isOpen" role="presentation">
+          <button
+            type="button"
+            className="nb-dialogBackdrop"
+            aria-label="Annulla"
+            onClick={() => setDeleteOpen(false)}
+          />
+          <div
+            className="nb-dialogCard"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Elimina appuntamento"
+          >
+            <h2 className="nb-dialogTitle">Eliminare l&apos;appuntamento?</h2>
+            <p className="nb-dialogSub">
+              “{selected.client} · {selected.timeLabel}” verrà rimosso dal database locale.
+            </p>
+            <div className="nb-dialogActions">
+              <button type="button" className="nb-ghostBtn" onClick={() => setDeleteOpen(false)}>
+                Annulla
+              </button>
+              <button
+                type="button"
+                className="nb-newBtn"
+                disabled={busy}
+                onClick={() => void confirmDelete()}
+              >
+                Elimina
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -641,12 +863,14 @@ function AppointmentInspector({
   onOpenClientSheet,
   onComplete,
   onNewAppointment,
+  onEdit,
   onDelete
 }: {
   appointment: DemoAppointment;
   onOpenClientSheet: () => void;
   onComplete: () => void;
   onNewAppointment: () => void;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const start = apptStartClock(appointment.startMin);
@@ -748,6 +972,10 @@ function AppointmentInspector({
         >
           <Check className="nb-agActionIcon" aria-hidden={true} />
           Completa
+        </button>
+        <button type="button" className="nb-agActionBtn" onClick={onEdit}>
+          <Pencil className="nb-agActionIcon" aria-hidden={true} />
+          Modifica
         </button>
         <button type="button" className="nb-agActionBtn danger" onClick={onDelete}>
           <Trash2 className="nb-agActionIcon" aria-hidden={true} />

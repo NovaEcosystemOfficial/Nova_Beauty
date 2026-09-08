@@ -2,10 +2,36 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode
 } from "react";
+import type { AppointmentListQuery, AppointmentSort } from "../../models/Appointment";
+import { uiStatusToDomain } from "../../models/Appointment";
+import type { ServiceListQuery, ServiceSort } from "../../models/Service";
+import {
+  createAppointmentViaRepository,
+  deleteAppointmentRemote,
+  dtoToWorkflowAppointment,
+  listAppointments,
+  updateAppointmentRemote
+} from "../data/appointmentsApi";
+import {
+  createClientRemote,
+  deleteClientRemote,
+  dtoToWorkflowShape,
+  listClients,
+  updateClientRemote
+} from "../data/clientsApi";
+import {
+  createServiceViaRepository,
+  deleteServiceViaRepository,
+  dtoToWorkflowService,
+  listServices,
+  updateServiceViaRepository
+} from "../data/servicesApi";
+import type { ClientListQuery, ClientSort } from "../../models/Client";
 
 export type ApptStatus = "confermato" | "da_confermare" | "completato" | "annullato";
 
@@ -26,6 +52,22 @@ export type WorkflowClient = {
   tags: string[];
   diaryPlaceholders: string[];
   historyLines: string[];
+  /** Presenti dopo sync SQLite (Sprint 2). */
+  firstName?: string;
+  lastName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ClientEditDraft = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  birthday: string;
+  notes: string;
+  status: WorkflowClient["status"];
+  favorite: boolean;
 };
 
 export type WorkflowAppointment = {
@@ -49,6 +91,30 @@ export type WorkflowAppointment = {
   lastTreatment: string;
   isNew?: boolean;
   justCompleted?: boolean;
+  /** Presenti dopo sync SQLite (Sprint 3). */
+  serviceId?: string;
+  operatorId?: string;
+  title?: string;
+  dateIso?: string;
+  startTime?: string;
+  endTime?: string;
+};
+
+export type AppointmentEditDraft = {
+  clientId: string;
+  client: string;
+  phone: string;
+  email: string;
+  operator: string;
+  cabin: string;
+  service: string;
+  dateLabel: string;
+  timeLabel: string;
+  durationMin: number;
+  price: number;
+  notes: string;
+  status: ApptStatus;
+  dayOffset?: number;
 };
 
 export type ActivityItem = {
@@ -71,6 +137,7 @@ export type NewAppointmentDraft = {
   operator: string;
   cabin: string;
   service: string;
+  serviceId?: string;
   dateLabel: string;
   timeLabel: string;
   durationMin: number;
@@ -85,8 +152,28 @@ export type WorkflowService = {
   durationMin: number;
   price: number;
   products: string;
+  productList: string[];
   operators: string[];
   color: string;
+  active: boolean;
+  description: string;
+  lastEdited: string;
+  tone: string;
+  soldCount: number;
+  cabin?: string;
+};
+
+export type ServiceEditDraft = {
+  name: string;
+  durationMin: number;
+  price: number;
+  description: string;
+  category?: string;
+  products?: string;
+  operators?: string[];
+  color?: string;
+  active?: boolean;
+  cabin?: string;
 };
 
 export type SupplierStatus = "attivo" | "disattivo";
@@ -165,6 +252,8 @@ export type NewServiceDraft = {
   products: string;
   operators: string[];
   color: string;
+  description?: string;
+  cabin?: string;
 };
 
 export type NewSupplierDraft = {
@@ -219,9 +308,19 @@ type DemoWorkflowValue = {
   openNewClientWizard: () => void;
   closeNewClientWizard: () => void;
   clearLastCreatedClientId: () => void;
-  bookAppointment: (draft: NewAppointmentDraft) => void;
-  createClient: (draft: NewClientDraft) => string;
-  createService: (draft: NewServiceDraft) => string;
+  bookAppointment: (draft: NewAppointmentDraft) => Promise<boolean>;
+  updateAppointment: (id: string, draft: AppointmentEditDraft) => Promise<boolean>;
+  deleteAppointment: (id: string) => Promise<boolean>;
+  reloadAppointments: (query?: AppointmentListQuery) => Promise<void>;
+  createClient: (draft: NewClientDraft) => Promise<string>;
+  updateClient: (id: string, draft: ClientEditDraft) => Promise<boolean>;
+  deleteClient: (id: string) => Promise<boolean>;
+  reloadClients: (query?: ClientListQuery) => Promise<void>;
+  createService: (draft: NewServiceDraft) => Promise<string | null>;
+  updateService: (id: string, draft: ServiceEditDraft) => Promise<boolean>;
+  deleteService: (id: string) => Promise<boolean>;
+  duplicateService: (id: string) => Promise<string | null>;
+  reloadServices: (query?: ServiceListQuery) => Promise<void>;
   createSupplier: (draft: NewSupplierDraft) => string;
   updateSupplier: (id: string, draft: SupplierUpdateDraft) => void;
   toggleSupplierStatus: (id: string) => void;
@@ -394,6 +493,7 @@ const INITIAL_CLIENTS: WorkflowClient[] = [
   }
 ];
 
+/** Seed di riferimento (demo). La UI legge SOLO da SQLite via IPC — non usare come state. */
 const INITIAL_APPOINTMENTS: WorkflowAppointment[] = [
   {
     id: "a1",
@@ -562,59 +662,6 @@ const INITIAL_ACTIVITIES: ActivityItem[] = [
   { id: "act2", time: "09:15", text: "Appuntamento prenotato" },
   { id: "act3", time: "10:30", text: "Pagamento registrato" },
   { id: "act4", time: "11:00", text: "Prodotto scaricato" }
-];
-
-const INITIAL_SERVICES: WorkflowService[] = [
-  {
-    id: "svc1",
-    name: "Pulizia viso deep",
-    category: "Viso",
-    durationMin: 60,
-    price: 65,
-    products: "Cleanser enzyme, Maschera argilla",
-    operators: ["Fabio", "Laura"],
-    color: "#c45c6a"
-  },
-  {
-    id: "svc2",
-    name: "Massaggio rilassante",
-    category: "Massaggi",
-    durationMin: 60,
-    price: 55,
-    products: "Olio mandorle",
-    operators: ["Laura"],
-    color: "#7a6bb0"
-  },
-  {
-    id: "svc3",
-    name: "Epilazione gambe",
-    category: "Epilazione",
-    durationMin: 45,
-    price: 40,
-    products: "Cera liposolubile",
-    operators: ["Fabio", "Laura"],
-    color: "#5a6b7a"
-  },
-  {
-    id: "svc4",
-    name: "Peeling enzimatico",
-    category: "Viso",
-    durationMin: 45,
-    price: 80,
-    products: "Peeling enzyme bio",
-    operators: ["Fabio"],
-    color: "#c45c6a"
-  },
-  {
-    id: "svc5",
-    name: "Pressoterapia",
-    category: "Corpo",
-    durationMin: 45,
-    price: 45,
-    products: "—",
-    operators: ["Laura"],
-    color: "#3d9b84"
-  }
 ];
 
 const INITIAL_SUPPLIERS: WorkflowSupplier[] = [
@@ -849,6 +896,27 @@ function parseTimeToStartMin(timeLabel: string): number {
   return (h - 8) * 60 + (m || 0);
 }
 
+function operatorIdFromName(name: string): string {
+  const n = name.trim().toLowerCase();
+  if (n === "fabio") return "op-fabio";
+  if (n === "laura") return "op-laura";
+  if (!n) return "";
+  return `op-${n.replace(/\s+/g, "-")}`;
+}
+
+function dateIsoFromDayOffset(dayOffset: number): string {
+  const day = 5 + dayOffset;
+  return `2026-08-${String(day).padStart(2, "0")}`;
+}
+
+function inferDateIso(dateLabel: string, dayOffset = 0): string {
+  const m = /(\d{1,2})\s+ago\s+(\d{4})/i.exec(dateLabel);
+  if (m) return `${m[2]}-08-${String(Number(m[1])).padStart(2, "0")}`;
+  const iso = /^(\d{4}-\d{2}-\d{2})/.exec(dateLabel.trim());
+  if (iso) return iso[1];
+  return dateIsoFromDayOffset(dayOffset);
+}
+
 function nowTimeLabel(): string {
   const d = new Date();
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -858,9 +926,12 @@ const DemoWorkflowContext = createContext<DemoWorkflowValue | null>(null);
 
 export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
   const [clients, setClients] = useState(INITIAL_CLIENTS);
-  const [services, setServices] = useState(INITIAL_SERVICES);
+  const [clientSort, setClientSort] = useState<ClientSort>("name_asc");
+  const [services, setServices] = useState<WorkflowService[]>([]);
+  const [serviceSort, setServiceSort] = useState<ServiceSort>("name_asc");
   const [suppliers, setSuppliers] = useState(INITIAL_SUPPLIERS);
-  const [appointments, setAppointments] = useState(INITIAL_APPOINTMENTS);
+  const [appointments, setAppointments] = useState<WorkflowAppointment[]>([]);
+  const [appointmentSort, setAppointmentSort] = useState<AppointmentSort>("date_asc");
   const [activities, setActivities] = useState(INITIAL_ACTIVITIES);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [appointmentsToday, setAppointmentsToday] = useState(8);
@@ -922,9 +993,65 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
     setLastCreatedClientId(null);
   }, []);
 
+  const reloadClients = useCallback(
+    async (query: ClientListQuery = {}) => {
+      const sort = query.sort ?? clientSort;
+      const result = await listClients({ ...query, sort });
+      if (!result.ok) {
+        if (result.code !== "NO_IPC") {
+          pushToast(result.message || "Errore caricamento clienti");
+        }
+        return;
+      }
+      if (query.sort) setClientSort(query.sort);
+      setClients(result.data.map(dtoToWorkflowShape));
+    },
+    [clientSort, pushToast]
+  );
+
+  useEffect(() => {
+    void reloadClients({ sort: "name_asc" });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- boot once
+
+  const reloadAppointments = useCallback(
+    async (query: AppointmentListQuery = {}) => {
+      const sort = query.sort ?? appointmentSort;
+      const result = await listAppointments({ ...query, sort });
+      if (!result.ok) {
+        pushToast(result.message || "Errore caricamento appuntamenti da repository");
+        return;
+      }
+      if (query.sort) setAppointmentSort(query.sort);
+      // Fonte unica: SQLite via IPC (mai INITIAL_APPOINTMENTS statici).
+      setAppointments(result.data.map(dtoToWorkflowAppointment));
+    },
+    [appointmentSort, pushToast]
+  );
+
+  useEffect(() => {
+    void reloadAppointments({ sort: "date_asc" });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- boot once
+
+  const reloadServices = useCallback(
+    async (query: ServiceListQuery = {}) => {
+      const sort = query.sort ?? serviceSort;
+      const result = await listServices({ ...query, sort });
+      if (!result.ok) {
+        pushToast(result.message || "Errore caricamento servizi da repository");
+        return;
+      }
+      if (query.sort) setServiceSort(query.sort);
+      setServices(result.data.map(dtoToWorkflowService));
+    },
+    [pushToast, serviceSort]
+  );
+
+  useEffect(() => {
+    void reloadServices({ sort: "name_asc" });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- boot once
+
   const createClient = useCallback(
-    (draft: NewClientDraft) => {
-      const id = `c-${Date.now()}`;
+    async (draft: NewClientDraft) => {
       const name = `${draft.firstName.trim()} ${draft.lastName.trim()}`.trim();
       const noteParts = [
         draft.notes.trim(),
@@ -940,15 +1067,10 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
         draft.profilePhoto ? "Foto profilo · caricata (demo)" : ""
       ].filter(Boolean);
 
-      const client: WorkflowClient = {
-        id,
-        name,
-        phone: draft.phone.trim() || "—",
-        email: draft.email.trim() || "—",
-        birthday: draft.birthday.trim() || "—",
-        notes: noteParts.join("\n") || draft.notes.trim(),
-        favorite: false,
-        status: "nuovo",
+      const notes = noteParts.join("\n") || draft.notes.trim();
+      const phone = draft.phone.trim();
+      const email = draft.email.trim();
+      const profileJson = JSON.stringify({
         lastAppointment: "—",
         lastTreatment: "—",
         nextAppointment: "—",
@@ -957,35 +1079,250 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
         tags: ["Nuova", ...(draft.privacyConsent ? ["Privacy ok"] : [])],
         diaryPlaceholders: ["Scheda anamnesi"],
         historyLines: []
-      };
-      setClients((prev) => [client, ...prev]);
-      setLastCreatedClientId(id);
+      });
+
+      const result = await createClientRemote({
+        firstName: draft.firstName.trim(),
+        lastName: draft.lastName.trim(),
+        phone: phone || undefined,
+        email: email || undefined,
+        birthday: draft.birthday.trim() || undefined,
+        notes,
+        favorite: false,
+        status: "nuovo",
+        profileJson
+      });
+
+      if (!result.ok) {
+        if (result.code === "NO_IPC") {
+          const id = `c-${Date.now()}`;
+          const client: WorkflowClient = {
+            id,
+            name,
+            phone: phone || "—",
+            email: email || "—",
+            birthday: draft.birthday.trim() || "—",
+            notes,
+            favorite: false,
+            status: "nuovo",
+            lastAppointment: "—",
+            lastTreatment: "—",
+            nextAppointment: "—",
+            totalSpent: 0,
+            fidelityPoints: 0,
+            tags: ["Nuova", ...(draft.privacyConsent ? ["Privacy ok"] : [])],
+            diaryPlaceholders: ["Scheda anamnesi"],
+            historyLines: [],
+            firstName: draft.firstName.trim(),
+            lastName: draft.lastName.trim(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          setClients((prev) => [client, ...prev]);
+          setLastCreatedClientId(id);
+          pushToast("Cliente creato");
+          pushActivity(`Nuovo cliente creato · ${name}`);
+          return id;
+        }
+        pushToast(result.message || "Impossibile creare il cliente");
+        return "";
+      }
+
+      const shaped = dtoToWorkflowShape(result.data);
+      setClients((prev) => {
+        const without = prev.filter((c) => c.id !== shaped.id);
+        return [shaped, ...without];
+      });
+      setLastCreatedClientId(shaped.id);
       pushToast("Cliente creato");
-      pushActivity(`Nuovo cliente creato · ${name}`);
-      return id;
+      pushActivity(`Nuovo cliente creato · ${shaped.name}`);
+      void reloadClients({ sort: clientSort });
+      return shaped.id;
     },
-    [pushActivity, pushToast]
+    [clientSort, pushActivity, pushToast, reloadClients]
+  );
+
+  const updateClient = useCallback(
+    async (id: string, draft: ClientEditDraft) => {
+      const result = await updateClientRemote({
+        id,
+        firstName: draft.firstName.trim(),
+        lastName: draft.lastName.trim(),
+        phone: draft.phone.trim() === "—" ? "" : draft.phone.trim(),
+        email: draft.email.trim() === "—" ? "" : draft.email.trim(),
+        birthday: draft.birthday.trim() === "—" ? "" : draft.birthday.trim(),
+        notes: draft.notes,
+        status: draft.status,
+        favorite: draft.favorite
+      });
+      if (!result.ok) {
+        if (result.code === "NO_IPC") {
+          setClients((prev) =>
+            prev.map((c) =>
+              c.id === id
+                ? {
+                    ...c,
+                    firstName: draft.firstName.trim(),
+                    lastName: draft.lastName.trim(),
+                    name: `${draft.firstName.trim()} ${draft.lastName.trim()}`.trim(),
+                    phone: draft.phone.trim() || "—",
+                    email: draft.email.trim() || "—",
+                    birthday: draft.birthday.trim() || "—",
+                    notes: draft.notes,
+                    status: draft.status,
+                    favorite: draft.favorite,
+                    updatedAt: new Date().toISOString()
+                  }
+                : c
+            )
+          );
+          pushToast("Cliente aggiornato");
+          return true;
+        }
+        pushToast(result.message || "Impossibile aggiornare il cliente");
+        return false;
+      }
+      const shaped = dtoToWorkflowShape(result.data);
+      setClients((prev) => prev.map((c) => (c.id === id ? { ...c, ...shaped } : c)));
+      pushToast("Cliente aggiornato");
+      void reloadClients({ sort: clientSort });
+      return true;
+    },
+    [clientSort, pushToast, reloadClients]
+  );
+
+  const deleteClient = useCallback(
+    async (id: string) => {
+      const existing = clients.find((c) => c.id === id);
+      const result = await deleteClientRemote(id);
+      if (!result.ok) {
+        if (result.code === "NO_IPC") {
+          setClients((prev) => prev.filter((c) => c.id !== id));
+          pushToast("Cliente eliminato");
+          if (existing) pushActivity(`Cliente eliminato · ${existing.name}`);
+          return true;
+        }
+        pushToast(result.message || "Impossibile eliminare il cliente");
+        return false;
+      }
+      setClients((prev) => prev.filter((c) => c.id !== id));
+      pushToast("Cliente eliminato");
+      if (existing) pushActivity(`Cliente eliminato · ${existing.name}`);
+      void reloadClients({ sort: clientSort });
+      return true;
+    },
+    [clientSort, clients, pushActivity, pushToast, reloadClients]
   );
 
   const createService = useCallback(
-    (draft: NewServiceDraft) => {
-      const id = `svc-${Date.now()}`;
-      const service: WorkflowService = {
-        id,
+    async (draft: NewServiceDraft) => {
+      const operators = draft.operators.length ? draft.operators : ["Fabio"];
+      const result = await createServiceViaRepository({
         name: draft.name.trim(),
         category: draft.category,
         durationMin: draft.durationMin,
         price: draft.price,
         products: draft.products.trim() || "—",
-        operators: draft.operators.length ? draft.operators : ["Fabio"],
-        color: draft.color
-      };
-      setServices((prev) => [service, ...prev]);
+        operatorsJson: JSON.stringify(operators),
+        color: draft.color,
+        active: true,
+        metaJson: JSON.stringify({
+          description: (draft.description ?? "").trim(),
+          lastEdited: new Date().toLocaleDateString("it-IT", {
+            day: "numeric",
+            month: "short",
+            year: "numeric"
+          }),
+          tone: "primary",
+          soldCount: 0,
+          cabin: draft.cabin
+        })
+      });
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile creare il servizio");
+        return null;
+      }
+      await reloadServices({ sort: serviceSort });
       pushToast("Servizio creato");
-      pushActivity(`Nuovo servizio creato · ${service.name}`);
-      return id;
+      pushActivity(`Nuovo servizio creato · ${result.data.name}`);
+      return result.data.id;
     },
-    [pushActivity, pushToast]
+    [pushActivity, pushToast, reloadServices, serviceSort]
+  );
+
+  const updateService = useCallback(
+    async (id: string, draft: ServiceEditDraft) => {
+      const existing = services.find((s) => s.id === id);
+      const meta = {
+        description: draft.description.trim(),
+        lastEdited: new Date().toLocaleDateString("it-IT", {
+          day: "numeric",
+          month: "short",
+          year: "numeric"
+        }),
+        tone: existing?.tone ?? "primary",
+        soldCount: existing?.soldCount ?? 0,
+        cabin: draft.cabin ?? existing?.cabin
+      };
+      const result = await updateServiceViaRepository({
+        id,
+        name: draft.name.trim(),
+        durationMin: draft.durationMin,
+        price: draft.price,
+        category: draft.category,
+        products: draft.products,
+        operatorsJson: draft.operators ? JSON.stringify(draft.operators) : undefined,
+        color: draft.color,
+        active: draft.active,
+        metaJson: JSON.stringify(meta)
+      });
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile aggiornare il servizio");
+        return false;
+      }
+      await reloadServices({ sort: serviceSort });
+      pushToast("Servizio aggiornato");
+      return true;
+    },
+    [pushToast, reloadServices, serviceSort, services]
+  );
+
+  const deleteService = useCallback(
+    async (id: string) => {
+      const existing = services.find((s) => s.id === id);
+      const result = await deleteServiceViaRepository(id);
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile eliminare il servizio");
+        return false;
+      }
+      await reloadServices({ sort: serviceSort });
+      pushToast("Servizio eliminato");
+      if (existing) pushActivity(`Servizio eliminato · ${existing.name}`);
+      return true;
+    },
+    [pushActivity, pushToast, reloadServices, serviceSort, services]
+  );
+
+  const duplicateService = useCallback(
+    async (id: string) => {
+      const source = services.find((s) => s.id === id);
+      if (!source) {
+        pushToast("Servizio non trovato");
+        return null;
+      }
+      return createService({
+        category: source.category,
+        name: `${source.name} (copia)`,
+        durationMin: source.durationMin,
+        price: source.price,
+        products: source.products,
+        operators: source.operators,
+        color: source.color,
+        description: source.description,
+        cabin: source.cabin
+      });
+    },
+    [createService, pushToast, services]
   );
 
   const createSupplier = useCallback(
@@ -1095,31 +1432,46 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
   const clearSupplierFocus = useCallback(() => setSupplierFocusKey(null), []);
 
   const bookAppointment = useCallback(
-    (draft: NewAppointmentDraft) => {
-      const id = `wf-${Date.now()}`;
-      const appt: WorkflowAppointment = {
-        id,
+    async (draft: NewAppointmentDraft) => {
+      const dayOffset = 0;
+      const startMin = parseTimeToStartMin(draft.timeLabel);
+      const serviceMatch = draft.serviceId
+        ? services.find((s) => s.id === draft.serviceId)
+        : services.find((s) => s.name === draft.service);
+      const payload = {
         clientId: draft.clientId,
-        client: draft.client,
+        clientName: draft.client,
+        serviceId: serviceMatch?.id ?? draft.serviceId ?? "",
+        serviceName: draft.service,
+        operatorId: operatorIdFromName(draft.operator),
+        operatorName: draft.operator,
+        title: draft.service,
+        cabin: draft.cabin,
+        dateIso: inferDateIso(draft.dateLabel, dayOffset),
+        dateLabel: draft.dateLabel,
+        startTime: draft.timeLabel,
+        timeLabel: draft.timeLabel,
+        durationMin: draft.durationMin,
+        dayOffset,
+        startMin,
+        price: draft.price,
         phone: draft.phone,
         email: draft.email,
-        service: draft.service,
-        operator: draft.operator,
-        cabin: draft.cabin,
-        dateLabel: draft.dateLabel,
-        timeLabel: draft.timeLabel,
-        startMin: parseTimeToStartMin(draft.timeLabel),
-        durationMin: draft.durationMin,
-        price: draft.price,
+        status: uiStatusToDomain("confermato"),
         notes: draft.notes,
-        status: "confermato",
-        dayOffset: 0,
-        history: "Appuntamento creato da workflow demo",
-        lastTreatment: "—",
-        isNew: true
+        history: "Appuntamento creato",
+        lastTreatment: "—"
       };
 
-      setAppointments((prev) => [...prev, appt]);
+      // AppointmentRepository.create() via IPC → INSERT SQLite (nessun fallback demo).
+      const result = await createAppointmentViaRepository(payload);
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile salvare l'appuntamento su database");
+        return false;
+      }
+
+      // Ricarica SEMPRE da AppointmentRepository (SQLite), non da stato demo.
+      await reloadAppointments({ sort: appointmentSort });
       setAppointmentsToday((n) => n + 1);
       setRevenueExpected((n) => n + draft.price);
       setClients((prev) =>
@@ -1130,16 +1482,79 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
         )
       );
       setNewApptDrawerOpen(false);
-      pushToast("Appuntamento creato");
+      pushToast("Appuntamento salvato");
       pushActivity(`Appuntamento prenotato · ${draft.client}`);
 
+      const savedId = result.data.id;
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === savedId ? { ...a, isNew: true } : a))
+      );
       window.setTimeout(() => {
         setAppointments((prev) =>
-          prev.map((a) => (a.id === id ? { ...a, isNew: false } : a))
+          prev.map((a) => (a.id === savedId ? { ...a, isNew: false } : a))
         );
       }, 2200);
+      return true;
     },
-    [pushActivity, pushToast]
+    [appointmentSort, pushActivity, pushToast, reloadAppointments, services]
+  );
+
+  const updateAppointment = useCallback(
+    async (id: string, draft: AppointmentEditDraft) => {
+      const dayOffset = draft.dayOffset ?? 0;
+      const startMin = parseTimeToStartMin(draft.timeLabel);
+      const serviceMatch = services.find((s) => s.name === draft.service);
+      const result = await updateAppointmentRemote({
+        id,
+        clientId: draft.clientId,
+        clientName: draft.client,
+        serviceId: serviceMatch?.id,
+        serviceName: draft.service,
+        operatorId: operatorIdFromName(draft.operator),
+        operatorName: draft.operator,
+        title: draft.service,
+        cabin: draft.cabin,
+        dateIso: inferDateIso(draft.dateLabel, dayOffset),
+        dateLabel: draft.dateLabel,
+        startTime: draft.timeLabel,
+        timeLabel: draft.timeLabel,
+        durationMin: draft.durationMin,
+        dayOffset,
+        startMin,
+        price: draft.price,
+        phone: draft.phone,
+        email: draft.email,
+        status: uiStatusToDomain(draft.status),
+        notes: draft.notes
+      });
+
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile aggiornare l'appuntamento");
+        return false;
+      }
+
+      await reloadAppointments({ sort: appointmentSort });
+      pushToast("Appuntamento aggiornato");
+      return true;
+    },
+    [appointmentSort, pushToast, reloadAppointments, services]
+  );
+
+  const deleteAppointment = useCallback(
+    async (id: string) => {
+      const existing = appointments.find((a) => a.id === id);
+      const result = await deleteAppointmentRemote(id);
+      if (!result.ok) {
+        pushToast(result.message || "Impossibile eliminare l'appuntamento");
+        return false;
+      }
+      if (detailApptId === id) setDetailApptId(null);
+      await reloadAppointments({ sort: appointmentSort });
+      pushToast("Appuntamento eliminato");
+      if (existing) pushActivity(`Appuntamento eliminato · ${existing.client}`);
+      return true;
+    },
+    [appointmentSort, appointments, detailApptId, pushActivity, pushToast, reloadAppointments]
   );
 
   const openAppointmentDetail = useCallback((id: string) => {
@@ -1168,64 +1583,68 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
     }) => {
       if (!detailApptId) return;
       const apptId = detailApptId;
+      const appt = appointments.find((a) => a.id === apptId);
+      if (!appt) return;
 
-      setAppointments((prev) => {
-        const appt = prev.find((a) => a.id === apptId);
-        if (!appt) return prev;
-
-        queueMicrotask(() => {
-          setClients((clientsPrev) =>
-            clientsPrev.map((c) => {
-              if (c.id !== appt.clientId) return c;
-              return {
-                ...c,
-                totalSpent: c.totalSpent + payload.amount,
-                fidelityPoints: c.fidelityPoints + Math.max(5, Math.round(payload.amount / 10)),
-                lastTreatment: appt.service,
-                lastAppointment: "Oggi",
-                historyLines: [
-                  `${appt.service} · oggi · €${payload.amount}`,
-                  ...c.historyLines
-                ].slice(0, 8)
-              };
-            })
-          );
+      void (async () => {
+        const result = await updateAppointmentRemote({
+          id: apptId,
+          status: "completato",
+          price: payload.amount,
+          notes: payload.notes || appt.notes
         });
 
-        return prev.map((a) =>
-          a.id === apptId
-            ? {
-                ...a,
-                status: "completato" as const,
-                price: payload.amount,
-                notes: payload.notes || a.notes,
-                justCompleted: true
-              }
-            : a
-        );
-      });
+        if (!result.ok) {
+          pushToast(result.message || "Impossibile completare l'appuntamento");
+          return;
+        }
 
-      setRevenueCompleted((n) => n + payload.amount);
-      setInventoryScaledHint(true);
-      setReportsPulse(true);
-      setCompleteDialogOpen(false);
-      setDetailApptId(null);
-      pushToast("Appuntamento completato");
-      pushActivity(`Pagamento registrato · €${payload.amount} · ${payload.paymentMethod}`);
-      pushActivity(
-        payload.products
-          ? `Prodotto scaricato · ${payload.products}`
-          : "Prodotto scaricato · magazzino"
-      );
-
-      window.setTimeout(() => setReportsPulse(false), 2400);
-      window.setTimeout(() => {
+        await reloadAppointments({ sort: appointmentSort });
         setAppointments((prev) =>
-          prev.map((a) => (a.id === apptId ? { ...a, justCompleted: false } : a))
+          prev.map((a) =>
+            a.id === apptId ? { ...a, justCompleted: true } : a
+          )
         );
-      }, 2000);
+
+        setClients((clientsPrev) =>
+          clientsPrev.map((c) => {
+            if (c.id !== appt.clientId) return c;
+            return {
+              ...c,
+              totalSpent: c.totalSpent + payload.amount,
+              fidelityPoints: c.fidelityPoints + Math.max(5, Math.round(payload.amount / 10)),
+              lastTreatment: appt.service,
+              lastAppointment: "Oggi",
+              historyLines: [
+                `${appt.service} · oggi · €${payload.amount}`,
+                ...c.historyLines
+              ].slice(0, 8)
+            };
+          })
+        );
+
+        setRevenueCompleted((n) => n + payload.amount);
+        setInventoryScaledHint(true);
+        setReportsPulse(true);
+        setCompleteDialogOpen(false);
+        setDetailApptId(null);
+        pushToast("Appuntamento completato");
+        pushActivity(`Pagamento registrato · €${payload.amount} · ${payload.paymentMethod}`);
+        pushActivity(
+          payload.products
+            ? `Prodotto scaricato · ${payload.products}`
+            : "Prodotto scaricato · magazzino"
+        );
+
+        window.setTimeout(() => setReportsPulse(false), 2400);
+        window.setTimeout(() => {
+          setAppointments((prev) =>
+            prev.map((a) => (a.id === apptId ? { ...a, justCompleted: false } : a))
+          );
+        }, 2000);
+      })();
     },
-    [detailApptId, pushActivity, pushToast]
+    [appointmentSort, appointments, detailApptId, pushActivity, pushToast, reloadAppointments]
   );
 
   const dismissToast = useCallback((id: string) => {
@@ -1281,8 +1700,18 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
       closeNewClientWizard,
       clearLastCreatedClientId,
       bookAppointment,
+      updateAppointment,
+      deleteAppointment,
+      reloadAppointments,
       createClient,
+      updateClient,
+      deleteClient,
+      reloadClients,
       createService,
+      updateService,
+      deleteService,
+      duplicateService,
+      reloadServices,
       createSupplier,
       updateSupplier,
       toggleSupplierStatus,
@@ -1331,8 +1760,18 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
       closeNewClientWizard,
       clearLastCreatedClientId,
       bookAppointment,
+      updateAppointment,
+      deleteAppointment,
+      reloadAppointments,
       createClient,
+      updateClient,
+      deleteClient,
+      reloadClients,
       createService,
+      updateService,
+      deleteService,
+      duplicateService,
+      reloadServices,
       createSupplier,
       updateSupplier,
       toggleSupplierStatus,

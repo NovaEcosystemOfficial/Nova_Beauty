@@ -14,8 +14,12 @@
   "include": [
     "electron/**/*.ts",
     "electron.vite.config.ts",
-    "src/**/*.ts",
-    "src/**/*.d.ts"
-  ]
+    "src/core/**/*.ts",
+    "src/models/**/*.ts",
+    "src/database/**/*.ts",
+    "src/repositories/**/*.ts",
+    "src/services/**/*.ts",
+    "src/index.ts"
+  ],
+  "exclude": ["src/renderer/**"]
 }
-

@@ -38,7 +38,8 @@ export default function NewAppointmentDrawer() {
     if (newApptDrawerOpen && !wasOpen.current) {
       setOperator(OPERATORS[0]);
       setCabin(CABINS[0]);
-      setServiceId(servicesRef.current[0]?.id ?? null);
+      const firstActive = servicesRef.current.find((s) => s.active) ?? servicesRef.current[0];
+      setServiceId(firstActive?.id ?? null);
       setTimeLabel("17:30");
       setNotes("");
       setClientDrawerOpen(false);
@@ -50,6 +51,13 @@ export default function NewAppointmentDrawer() {
     }
     wasOpen.current = newApptDrawerOpen;
   }, [newApptDrawerOpen]);
+
+  useEffect(() => {
+    if (!newApptDrawerOpen) return;
+    if (serviceId) return;
+    const firstActive = services.find((s) => s.active) ?? services[0];
+    if (firstActive) setServiceId(firstActive.id);
+  }, [newApptDrawerOpen, serviceId, services]);
 
   const client = newApptClientId ? getClient(newApptClientId) : undefined;
   const service = serviceId ? getService(serviceId) : undefined;
@@ -66,11 +74,13 @@ export default function NewAppointmentDrawer() {
 
   const serviceItems = useMemo(
     () =>
-      services.map((s) => ({
-        id: s.id,
-        label: s.name,
-        meta: `${s.durationMin} min · €${s.price}`
-      })),
+      services
+        .filter((s) => s.active)
+        .map((s) => ({
+          id: s.id,
+          label: s.name,
+          meta: `${s.durationMin} min · €${s.price}`
+        })),
     [services]
   );
 
@@ -92,20 +102,24 @@ export default function NewAppointmentDrawer() {
           onSubmit={(e) => {
             e.preventDefault();
             if (!client || !service) return;
-            bookAppointment({
-              clientId: client.id,
-              client: client.name,
-              phone: client.phone,
-              email: client.email,
-              operator,
-              cabin,
-              service: service.name,
-              dateLabel: "Mer 5 ago 2026",
-              timeLabel,
-              durationMin: service.durationMin,
-              price: service.price,
-              notes
-            });
+            void (async () => {
+              const ok = await bookAppointment({
+                clientId: client.id,
+                client: client.name,
+                phone: client.phone,
+                email: client.email,
+                operator,
+                cabin,
+                service: service.name,
+                serviceId: service.id,
+                dateLabel: "Mer 5 ago 2026",
+                timeLabel,
+                durationMin: service.durationMin,
+                price: service.price,
+                notes
+              });
+              if (!ok) return;
+            })();
           }}
         >
           <Field label="Cliente">

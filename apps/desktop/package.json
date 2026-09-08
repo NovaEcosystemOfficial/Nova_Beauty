@@ -13,6 +13,7 @@
     "dist:win": "npm run build && electron-builder --win nsis portable"
   },
   "dependencies": {
+    "better-sqlite3": "^12.10.0",
     "clsx": "^2.1.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
@@ -22,6 +23,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.2",

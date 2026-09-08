@@ -12,7 +12,12 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useEffect, useMemo, useState } from "react";
-import { useDemoWorkflow, type WorkflowClient } from "../demo/DemoWorkflowContext";
+import type { ClientSort } from "../../models/Client";
+import {
+  useDemoWorkflow,
+  type ClientEditDraft,
+  type WorkflowClient
+} from "../demo/DemoWorkflowContext";
 
 type ListFilter = "tutti" | "preferiti" | "attivi" | "nuovi";
 
@@ -28,6 +33,13 @@ const EVOLUTION_DEMO: Array<{ id: string; label: string; meta: string }> = [
   { id: "ev2", label: "2 settimane", meta: "Controllo · note e foto" },
   { id: "ev3", label: "1 mese", meta: "Verifica risultato · follow-up" },
   { id: "ev4", label: "3 mesi", meta: "Mantieni · nuovo ciclo" }
+];
+
+const SORT_OPTIONS: Array<{ key: ClientSort; label: string }> = [
+  { key: "name_asc", label: "Nome A-Z" },
+  { key: "name_desc", label: "Nome Z-A" },
+  { key: "created_desc", label: "Ultimo inserito" },
+  { key: "updated_desc", label: "Data modifica" }
 ];
 
 function statusLabel(status: WorkflowClient["status"]): string {
@@ -62,14 +74,52 @@ function waHref(phone: string): string {
   return `https://wa.me/${phoneDigits(phone)}`;
 }
 
+function splitName(client: WorkflowClient): { firstName: string; lastName: string } {
+  if (client.firstName || client.lastName) {
+    return {
+      firstName: client.firstName ?? "",
+      lastName: client.lastName ?? ""
+    };
+  }
+  const parts = client.name.split(/\s+/).filter(Boolean);
+  return { firstName: parts[0] ?? "", lastName: parts.slice(1).join(" ") };
+}
+
+function draftFromClient(client: WorkflowClient): ClientEditDraft {
+  const { firstName, lastName } = splitName(client);
+  return {
+    firstName,
+    lastName,
+    phone: client.phone === "—" ? "" : client.phone,
+    email: client.email === "—" ? "" : client.email,
+    birthday: client.birthday === "—" ? "" : client.birthday,
+    notes: client.notes,
+    status: client.status,
+    favorite: client.favorite
+  };
+}
+
 export default function ClientsWorkspace() {
-  const { clients, appointments, pushToast, lastCreatedClientId, clearLastCreatedClientId } =
-    useDemoWorkflow();
+  const {
+    clients,
+    appointments,
+    pushToast,
+    lastCreatedClientId,
+    clearLastCreatedClientId,
+    updateClient,
+    deleteClient,
+    reloadClients
+  } = useDemoWorkflow();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ListFilter>("tutti");
+  const [sort, setSort] = useState<ClientSort>("name_asc");
   const [selectedId, setSelectedId] = useState(clients[0]?.id ?? "c1");
   const [activeSlot, setActiveSlot] = useState<string | null>(null);
   const [activeEvolution, setActiveEvolution] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState<ClientEditDraft | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!lastCreatedClientId) return;
@@ -79,6 +129,10 @@ export default function ClientsWorkspace() {
     clearLastCreatedClientId();
   }, [lastCreatedClientId, clearLastCreatedClientId]);
 
+  useEffect(() => {
+    void reloadClients({ sort });
+  }, [sort]); // eslint-disable-line react-hooks/exhaustive-deps -- sort only
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return clients.filter((c) => {
@@ -86,15 +140,48 @@ export default function ClientsWorkspace() {
       if (filter === "attivi" && c.status !== "attivo") return false;
       if (filter === "nuovi" && c.status !== "nuovo") return false;
       if (!q) return true;
+      const { firstName, lastName } = splitName(c);
       return (
         c.name.toLowerCase().includes(q) ||
+        firstName.toLowerCase().includes(q) ||
+        lastName.toLowerCase().includes(q) ||
         c.email.toLowerCase().includes(q) ||
         c.phone.toLowerCase().includes(q)
       );
     });
   }, [clients, query, filter]);
 
-  const selected = filtered.find((c) => c.id === selectedId) ?? filtered[0] ?? clients[0];
+  const selected =
+    filtered.find((c) => c.id === selectedId) ?? filtered[0] ?? clients[0] ?? null;
+
+  useEffect(() => {
+    if (!selected) return;
+    if (!filtered.some((c) => c.id === selected.id) && filtered[0]) {
+      setSelectedId(filtered[0].id);
+    }
+  }, [filtered, selected]);
+
+  if (!selected) {
+    return (
+      <div className="nb-clientsWs" role="region" aria-label="Workspace Clienti">
+        <aside className="nb-cwList">
+          <div className="nb-cwListToolbar">
+            <div className="nb-cwSearch">
+              <Search className="nb-cwSearchIcon" aria-hidden={true} />
+              <input
+                className="nb-cwSearchInput"
+                placeholder="Cerca nella lista…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Cerca clienti"
+              />
+            </div>
+          </div>
+          <p className="nb-cwListMetaHint">Nessun cliente</p>
+        </aside>
+      </div>
+    );
+  }
 
   const futureAppts = appointments.filter(
     (a) => a.clientId === selected.id && a.status !== "completato" && a.status !== "annullato"
@@ -102,6 +189,8 @@ export default function ClientsWorkspace() {
 
   const phone = selected.phone.trim();
   const email = selected.email.trim();
+  const hasPhone = Boolean(phoneDigits(phone));
+  const hasEmail = Boolean(email) && email !== "—";
 
   const onDiarySlot = (slotId: string, kind: "photo" | "zones" | "followup") => {
     setActiveSlot(`${selected.id}:${slotId}`);
@@ -115,6 +204,36 @@ export default function ClientsWorkspace() {
       return;
     }
     pushToast("Diario fotografico · sync Staff in arrivo");
+  };
+
+  const openEdit = () => {
+    setEditDraft(draftFromClient(selected));
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editDraft || busy) return;
+    if (!editDraft.firstName.trim()) {
+      pushToast("Il nome è obbligatorio.");
+      return;
+    }
+    setBusy(true);
+    const ok = await updateClient(selected.id, editDraft);
+    setBusy(false);
+    if (ok) setEditOpen(false);
+  };
+
+  const confirmDelete = async () => {
+    if (busy) return;
+    setBusy(true);
+    const id = selected.id;
+    const ok = await deleteClient(id);
+    setBusy(false);
+    if (ok) {
+      setDeleteOpen(false);
+      const next = clients.find((c) => c.id !== id);
+      if (next) setSelectedId(next.id);
+    }
   };
 
   return (
@@ -147,6 +266,18 @@ export default function ClientsWorkspace() {
                 onClick={() => setFilter(key)}
               >
                 {label}
+              </button>
+            ))}
+          </div>
+          <div className="nb-cwFilters" role="toolbar" aria-label="Ordina clienti">
+            {SORT_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                className={clsx("nb-cwFilter", sort === opt.key && "isActive")}
+                onClick={() => setSort(opt.key)}
+              >
+                {opt.label}
               </button>
             ))}
           </div>
@@ -369,7 +500,7 @@ export default function ClientsWorkspace() {
         </div>
 
         <div className="nb-cwQuickActions">
-          {phone ? (
+          {hasPhone ? (
             <a
               className="nb-cwQuick"
               href={telHref(phone)}
@@ -387,7 +518,7 @@ export default function ClientsWorkspace() {
             </span>
           )}
 
-          {email ? (
+          {hasEmail ? (
             <a
               className="nb-cwQuick"
               href={`mailto:${email}`}
@@ -405,7 +536,7 @@ export default function ClientsWorkspace() {
             </span>
           )}
 
-          {phone ? (
+          {hasPhone ? (
             <a
               className="nb-cwQuick"
               href={waHref(phone)}
@@ -422,6 +553,13 @@ export default function ClientsWorkspace() {
               Nessun numero disponibile
             </span>
           )}
+
+          <button type="button" className="nb-cwQuick" onClick={openEdit}>
+            Modifica
+          </button>
+          <button type="button" className="nb-cwQuick" onClick={() => setDeleteOpen(true)}>
+            Elimina
+          </button>
         </div>
       </section>
 
@@ -460,6 +598,125 @@ export default function ClientsWorkspace() {
           </ol>
         </div>
       </aside>
+
+      {editOpen && editDraft ? (
+        <div className="nb-dialogRoot isOpen" role="presentation">
+          <button
+            type="button"
+            className="nb-dialogBackdrop"
+            aria-label="Annulla"
+            onClick={() => setEditOpen(false)}
+          />
+          <div className="nb-dialogCard" role="dialog" aria-modal="true" aria-label="Modifica cliente">
+            <h2 className="nb-dialogTitle">Modifica cliente</h2>
+            <p className="nb-dialogSub">{selected.name}</p>
+            <div className="nb-drawerForm">
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Nome</span>
+                <input
+                  className="nb-drawerInput"
+                  value={editDraft.firstName}
+                  onChange={(e) => setEditDraft({ ...editDraft, firstName: e.target.value })}
+                />
+              </label>
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Cognome</span>
+                <input
+                  className="nb-drawerInput"
+                  value={editDraft.lastName}
+                  onChange={(e) => setEditDraft({ ...editDraft, lastName: e.target.value })}
+                />
+              </label>
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Telefono</span>
+                <input
+                  className="nb-drawerInput"
+                  value={editDraft.phone}
+                  onChange={(e) => setEditDraft({ ...editDraft, phone: e.target.value })}
+                />
+              </label>
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Email</span>
+                <input
+                  className="nb-drawerInput"
+                  value={editDraft.email}
+                  onChange={(e) => setEditDraft({ ...editDraft, email: e.target.value })}
+                />
+              </label>
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Data nascita</span>
+                <input
+                  className="nb-drawerInput"
+                  value={editDraft.birthday}
+                  onChange={(e) => setEditDraft({ ...editDraft, birthday: e.target.value })}
+                />
+              </label>
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Note</span>
+                <textarea
+                  className="nb-drawerInput"
+                  rows={3}
+                  value={editDraft.notes}
+                  onChange={(e) => setEditDraft({ ...editDraft, notes: e.target.value })}
+                />
+              </label>
+              <label className="nb-drawerField">
+                <span className="nb-drawerFieldLabel">Stato</span>
+                <select
+                  className="nb-drawerInput"
+                  value={editDraft.status}
+                  onChange={(e) =>
+                    setEditDraft({
+                      ...editDraft,
+                      status: e.target.value as WorkflowClient["status"]
+                    })
+                  }
+                >
+                  <option value="attivo">Attivo</option>
+                  <option value="inattivo">Inattivo</option>
+                  <option value="nuovo">Nuovo</option>
+                </select>
+              </label>
+            </div>
+            <div className="nb-dialogActions">
+              <button type="button" className="nb-ghostBtn" onClick={() => setEditOpen(false)}>
+                Annulla
+              </button>
+              <button type="button" className="nb-newBtn" disabled={busy} onClick={() => void saveEdit()}>
+                Salva
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteOpen ? (
+        <div className="nb-dialogRoot isOpen" role="presentation">
+          <button
+            type="button"
+            className="nb-dialogBackdrop"
+            aria-label="Annulla"
+            onClick={() => setDeleteOpen(false)}
+          />
+          <div className="nb-dialogCard" role="dialog" aria-modal="true" aria-label="Elimina cliente">
+            <h2 className="nb-dialogTitle">Eliminare il cliente?</h2>
+            <p className="nb-dialogSub">“{selected.name}” verrà rimosso dal database locale.</p>
+            <div className="nb-dialogActions">
+              <button type="button" className="nb-ghostBtn" onClick={() => setDeleteOpen(false)}>
+                Annulla
+              </button>
+              <button
+                type="button"
+                className="nb-newBtn"
+                disabled={busy}
+                onClick={() => void confirmDelete()}
+              >
+                Elimina
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

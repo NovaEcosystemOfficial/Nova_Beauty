@@ -15,8 +15,9 @@ import {
   Upload
 } from "lucide-react";
 import clsx from "clsx";
-import { useMemo, useState } from "react";
-import { useDemoWorkflow } from "../demo/DemoWorkflowContext";
+import { useEffect, useMemo, useState } from "react";
+import { useDemoWorkflow, type WorkflowService } from "../demo/DemoWorkflowContext";
+import type { ServiceSort } from "../../models/Service";
 import NewServiceWizard, { type ServiceWizardResult } from "./ui/NewServiceWizard";
 
 type ServiceCategory =
@@ -73,178 +74,6 @@ const CATEGORY_TONE: Record<ServiceCategory, CategoryTone> = {
   Pacchetti: "gold"
 };
 
-const INITIAL_SERVICES: DemoService[] = [
-  {
-    id: "s1",
-    name: "Pulizia viso deep",
-    category: "Viso",
-    durationMin: 60,
-    price: 65,
-    active: true,
-    description: "Pulizia profonda con estrazione, maschera e idratazione finale.",
-    products: ["Cleanser enzyme", "Maschera argilla", "Siero idratante"],
-    operators: ["Fabio", "Laura"],
-    lastEdited: "2 ago 2026",
-    tone: "primary",
-    soldCount: 48,
-    cabin: "Cabina 1"
-  },
-  {
-    id: "s2",
-    name: "Peeling enzimatico",
-    category: "Viso",
-    durationMin: 45,
-    price: 80,
-    active: true,
-    description: "Peeling delicato per luminosità e texture più uniforme.",
-    products: ["Peeling enzyme bio", "Crema lenitiva"],
-    operators: ["Fabio"],
-    lastEdited: "28 lug 2026",
-    tone: "primary",
-    soldCount: 31
-  },
-  {
-    id: "s3",
-    name: "Massaggio rilassante",
-    category: "Massaggi",
-    durationMin: 60,
-    price: 55,
-    active: true,
-    description: "Massaggio corpo a olio caldo, focus schiena e spalle.",
-    products: ["Olio mandorle", "Candela massaggio"],
-    operators: ["Laura", "Fabio"],
-    lastEdited: "30 lug 2026",
-    tone: "lavender",
-    soldCount: 62
-  },
-  {
-    id: "s4",
-    name: "Pressoterapia",
-    category: "Corpo",
-    durationMin: 45,
-    price: 45,
-    active: true,
-    description: "Trattamento drenante con tuta pressoterapica.",
-    products: ["Gel drenante"],
-    operators: ["Laura"],
-    lastEdited: "25 lug 2026",
-    tone: "mint",
-    soldCount: 27
-  },
-  {
-    id: "s5",
-    name: "Manicure spa",
-    category: "Mani",
-    durationMin: 40,
-    price: 35,
-    active: true,
-    description: "Cura mani completa con scrub, maschera e smalto classico.",
-    products: ["Scrub mani", "Base coat", "Smalto"],
-    operators: ["Laura"],
-    lastEdited: "20 lug 2026",
-    tone: "rose",
-    soldCount: 41
-  },
-  {
-    id: "s6",
-    name: "Pedicure estetico",
-    category: "Piedi",
-    durationMin: 50,
-    price: 42,
-    active: true,
-    description: "Cura piedi con callosità leggere e finitura smalto.",
-    products: ["Crema piedi", "Smalto"],
-    operators: ["Laura"],
-    lastEdited: "18 lug 2026",
-    tone: "gold",
-    soldCount: 22
-  },
-  {
-    id: "s7",
-    name: "Epilazione gambe",
-    category: "Epilazione",
-    durationMin: 45,
-    price: 40,
-    active: true,
-    description: "Epilazione completa gambe con cera a caldo.",
-    products: ["Cera professionale", "Olio post"],
-    operators: ["Laura", "Fabio"],
-    lastEdited: "22 lug 2026",
-    tone: "slate",
-    soldCount: 55
-  },
-  {
-    id: "s8",
-    name: "Extension ciglia classiche",
-    category: "Extension ciglia",
-    durationMin: 90,
-    price: 95,
-    active: true,
-    description: "Applicazione one-by-one per volume naturale.",
-    products: ["Ciglia 0.15", "Colla hypo"],
-    operators: ["Fabio"],
-    lastEdited: "1 ago 2026",
-    tone: "lavender",
-    soldCount: 19
-  },
-  {
-    id: "s9",
-    name: "Trucco evento",
-    category: "Trucco",
-    durationMin: 50,
-    price: 70,
-    active: false,
-    description: "Make-up completo per eventi — temporaneamente non in listino.",
-    products: ["Primer", "Fondotinta", "Palette occhi"],
-    operators: ["Fabio"],
-    lastEdited: "10 giu 2026",
-    tone: "rose",
-    soldCount: 8
-  },
-  {
-    id: "s10",
-    name: "Pacchetto Viso Glow ×5",
-    category: "Pacchetti",
-    durationMin: 60,
-    price: 280,
-    active: true,
-    description: "5 sedute pulizia + peeling a prezzo dedicato.",
-    products: ["Kit viso studio"],
-    operators: ["Fabio", "Laura"],
-    lastEdited: "3 ago 2026",
-    tone: "gold",
-    soldCount: 14
-  },
-  {
-    id: "s11",
-    name: "Idratazione intensiva",
-    category: "Viso",
-    durationMin: 50,
-    price: 55,
-    active: true,
-    description: "Trattamento idratante con ampolle e maschera tessuto.",
-    products: ["Ampolla HA", "Maschera tessuto"],
-    operators: ["Fabio", "Laura"],
-    lastEdited: "29 lug 2026",
-    tone: "primary",
-    soldCount: 36
-  },
-  {
-    id: "s12",
-    name: "Massaggio linfodrenante",
-    category: "Massaggi",
-    durationMin: 50,
-    price: 60,
-    active: true,
-    description: "Manovre drenanti per gambe e addome.",
-    products: ["Crema drenante"],
-    operators: ["Laura"],
-    lastEdited: "27 lug 2026",
-    tone: "lavender",
-    soldCount: 24
-  }
-];
-
 type SortKey = "nome" | "prezzo" | "durata" | "categoria";
 type DurationFilter = "tutti" | "breve" | "media" | "lunga";
 type PriceFilter = "tutti" | "low" | "mid" | "high";
@@ -263,17 +92,70 @@ function formatDuration(min: number): string {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
-function todayLabel(): string {
-  return "5 ago 2026";
-}
-
 function asCategory(value: string): ServiceCategory {
   return (CATEGORIES.includes(value as ServiceCategory) ? value : "Viso") as ServiceCategory;
 }
 
+function asTone(value: string, category: ServiceCategory): CategoryTone {
+  if (
+    value === "primary" ||
+    value === "mint" ||
+    value === "gold" ||
+    value === "lavender" ||
+    value === "rose" ||
+    value === "slate"
+  ) {
+    return value;
+  }
+  return CATEGORY_TONE[category];
+}
+
+function toDemoService(s: WorkflowService): DemoService {
+  const category = asCategory(s.category);
+  return {
+    id: s.id,
+    name: s.name,
+    category,
+    durationMin: s.durationMin,
+    price: s.price,
+    active: s.active,
+    description: s.description,
+    products: s.productList?.length ? s.productList : ["—"],
+    operators: s.operators,
+    lastEdited: s.lastEdited,
+    tone: asTone(s.tone, category),
+    soldCount: s.soldCount,
+    cabin: s.cabin
+  };
+}
+
+function sortKeyToRepo(sort: SortKey): ServiceSort {
+  switch (sort) {
+    case "prezzo":
+      return "price_asc";
+    case "durata":
+      return "duration_asc";
+    case "categoria":
+      return "category_asc";
+    default:
+      return "name_asc";
+  }
+}
+
 export default function ServicesWorkspace() {
-  const { pushToast, createService } = useDemoWorkflow();
-  const [services, setServices] = useState(INITIAL_SERVICES);
+  const {
+    services: workflowServices,
+    pushToast,
+    createService,
+    updateService,
+    deleteService,
+    duplicateService,
+    reloadServices
+  } = useDemoWorkflow();
+  const services = useMemo(
+    () => workflowServices.map(toDemoService),
+    [workflowServices]
+  );
   const [category, setCategory] = useState<"Tutti" | ServiceCategory>("Tutti");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("nome");
@@ -281,7 +163,7 @@ export default function ServicesWorkspace() {
   const [priceFilter, setPriceFilter] = useState<PriceFilter>("tutti");
   const [operatorFilter, setOperatorFilter] = useState("tutti");
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("tutti");
-  const [selectedId, setSelectedId] = useState(INITIAL_SERVICES[0].id);
+  const [selectedId, setSelectedId] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [confirmKind, setConfirmKind] = useState<ConfirmKind>(null);
@@ -291,6 +173,14 @@ export default function ServicesWorkspace() {
     price: 50,
     description: ""
   });
+
+  useEffect(() => {
+    void reloadServices({ sort: sortKeyToRepo(sort) });
+  }, [sort]); // eslint-disable-line react-hooks/exhaustive-deps -- sort only
+
+  useEffect(() => {
+    if (!selectedId && services[0]) setSelectedId(services[0].id);
+  }, [services, selectedId]);
 
   const categoryCounts = useMemo(() => {
     const map: Record<string, number> = { Tutti: services.length };
@@ -359,54 +249,29 @@ export default function ServicesWorkspace() {
     };
   }, [services]);
 
-  const duplicateService = (source: DemoService) => {
-    const id = `s-${Date.now()}`;
-    const copy: DemoService = {
-      ...source,
-      id,
-      name: `${source.name} (copia)`,
-      lastEdited: todayLabel(),
-      soldCount: 0,
-      active: true
-    };
-    setServices((prev) => [copy, ...prev]);
-    setSelectedId(id);
-    pushToast("Servizio duplicato");
+  const handleDuplicate = async (source: DemoService) => {
+    const id = await duplicateService(source.id);
+    if (id) setSelectedId(id);
   };
 
-  const handleWizardCreate = (result: ServiceWizardResult) => {
+  const handleWizardCreate = async (result: ServiceWizardResult) => {
     const cat = asCategory(result.category);
-    const id = `s-${Date.now()}`;
     const products = result.products
       .split(",")
       .map((p) => p.trim())
       .filter(Boolean);
-    const service: DemoService = {
-      id,
-      name: result.name.trim(),
+    const id = await createService({
       category: cat,
+      name: result.name.trim(),
       durationMin: result.durationMin,
       price: result.price,
-      active: true,
-      description: result.description.trim() || "Descrizione demo.",
-      products: products.length ? products : ["—"],
-      operators: result.operators.length ? result.operators : ["Fabio"],
-      lastEdited: todayLabel(),
-      tone: CATEGORY_TONE[cat],
-      soldCount: 0,
-      cabin: result.cabin
-    };
-    setServices((prev) => [service, ...prev]);
-    setSelectedId(id);
-    createService({
-      category: cat,
-      name: service.name,
-      durationMin: service.durationMin,
-      price: service.price,
       products: products.join(", "),
-      operators: service.operators,
-      color: "#c45c6a"
+      operators: result.operators.length ? result.operators : ["Fabio"],
+      color: "#c45c6a",
+      description: result.description.trim(),
+      cabin: result.cabin
     });
+    if (id) setSelectedId(id);
   };
 
   const openEdit = () => {
@@ -420,47 +285,36 @@ export default function ServicesWorkspace() {
     setEditOpen(true);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!selected) return;
-    setServices((prev) =>
-      prev.map((s) =>
-        s.id === selected.id
-          ? {
-              ...s,
-              name: editDraft.name.trim() || s.name,
-              durationMin: editDraft.durationMin,
-              price: editDraft.price,
-              description: editDraft.description.trim(),
-              lastEdited: todayLabel()
-            }
-          : s
-      )
-    );
-    setEditOpen(false);
-    pushToast("Servizio aggiornato");
+    const ok = await updateService(selected.id, {
+      name: editDraft.name.trim() || selected.name,
+      durationMin: editDraft.durationMin,
+      price: editDraft.price,
+      description: editDraft.description.trim()
+    });
+    if (ok) setEditOpen(false);
   };
 
-  const runConfirm = () => {
+  const runConfirm = async () => {
     if (!selected || !confirmKind) return;
     if (confirmKind === "duplicate") {
-      duplicateService(selected);
+      await handleDuplicate(selected);
     } else if (confirmKind === "toggle") {
-      setServices((prev) =>
-        prev.map((s) =>
-          s.id === selected.id
-            ? { ...s, active: !s.active, lastEdited: todayLabel() }
-            : s
-        )
-      );
-      pushToast(selected.active ? "Servizio disattivato" : "Servizio riattivato");
+      await updateService(selected.id, {
+        name: selected.name,
+        durationMin: selected.durationMin,
+        price: selected.price,
+        description: selected.description,
+        active: !selected.active
+      });
     } else if (confirmKind === "delete") {
       const removedId = selected.id;
-      setServices((prev) => {
-        const next = prev.filter((s) => s.id !== removedId);
-        setSelectedId(next[0]?.id ?? "");
-        return next;
-      });
-      pushToast("Servizio eliminato");
+      const ok = await deleteService(removedId);
+      if (ok) {
+        const next = services.find((s) => s.id !== removedId);
+        setSelectedId(next?.id ?? "");
+      }
     }
     setConfirmKind(null);
   };
@@ -841,7 +695,7 @@ export default function ServicesWorkspace() {
               <button type="button" className="nb-ghostBtn" onClick={() => setEditOpen(false)}>
                 Annulla
               </button>
-              <button type="button" className="nb-newBtn" onClick={saveEdit}>
+              <button type="button" className="nb-newBtn" onClick={() => void saveEdit()}>
                 Salva
               </button>
             </div>
@@ -869,7 +723,7 @@ export default function ServicesWorkspace() {
               <button
                 type="button"
                 className={clsx("nb-newBtn", confirmKind === "delete" && "nb-svConfirmDanger")}
-                onClick={runConfirm}
+                onClick={() => void runConfirm()}
               >
                 {confirmCopy.confirm}
               </button>

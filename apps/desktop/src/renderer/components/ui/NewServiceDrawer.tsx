@@ -81,9 +81,12 @@ export default function NewServiceDrawer({
         onSubmit={(e) => {
           e.preventDefault();
           if (!canSave) return;
-          const id = createService(draft);
-          onCreated(id);
-          onClose();
+          void (async () => {
+            const id = await createService(draft);
+            if (!id) return;
+            onCreated(id);
+            onClose();
+          })();
         }}
       >
         <Field label="Categoria">

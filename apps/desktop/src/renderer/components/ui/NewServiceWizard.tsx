@@ -33,7 +33,7 @@ const CABINS = ["Cabina 1", "Cabina 2", "Cabina 3", "Open space"];
 type NewServiceWizardProps = {
   open: boolean;
   onClose: () => void;
-  onCreate: (result: ServiceWizardResult) => void;
+  onCreate: (result: ServiceWizardResult) => void | Promise<void>;
 };
 
 type Draft = ServiceWizardResult;
@@ -265,8 +265,10 @@ export default function NewServiceWizard({ open, onClose, onCreate }: NewService
               disabled={!canContinue}
               onClick={() => {
                 if (!canContinue) return;
-                onCreate(draft);
-                onClose();
+                void (async () => {
+                  await onCreate(draft);
+                  onClose();
+                })();
               }}
             >
               Crea Servizio

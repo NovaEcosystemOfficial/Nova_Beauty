@@ -1,10 +1,87 @@
 import { app, BrowserWindow, shell } from "electron";
-import { join } from "path";
-import { fileURLToPath } from "url";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { registerAppointmentIpcHandlers } from "./appointmentIpc";
+import { registerClientIpcHandlers } from "./clientIpc";
+import { registerServiceIpcHandlers } from "./serviceIpc";
+import { AppointmentService } from "../../src/services/AppointmentService";
+import { firestoreAppointmentSyncHooks } from "../../src/services/appointmentSyncHooks";
+import { ClientService } from "../../src/services/ClientService";
+import { firestoreClientSyncHooks } from "../../src/services/clientSyncHooks";
+import { ServiceService } from "../../src/services/ServiceService";
+import { firestoreServiceSyncHooks } from "../../src/services/serviceSyncHooks";
+import { DataEngine } from "../../src/services/DataEngine";
 
-const __dirname = fileURLToPath(new URL(".", import.meta.url));
+function mainDir(): string {
+  if (typeof import.meta.dirname === "string" && import.meta.dirname.length > 0) {
+    return import.meta.dirname;
+  }
+  return dirname(fileURLToPath(import.meta.url));
+}
+
+function resolvePreloadPath(): string {
+  const candidates = [
+    join(mainDir(), "../preload/index.mjs"),
+    join(app.getAppPath(), "out/preload/index.mjs"),
+    join(process.cwd(), "out/preload/index.mjs"),
+    join(process.cwd(), "apps/desktop/out/preload/index.mjs")
+  ];
+  const found = candidates.find((p) => existsSync(p));
+  if (!found) {
+    console.error("[NovaBeauty] preload non trovato. Candidati:", candidates);
+    return candidates[0];
+  }
+  console.info("[NovaBeauty] preload:", found);
+  return found;
+}
+
+/**
+ * Avvia SQLite + registra IPC clienti/appuntamenti.
+ * I handler IPC vengono registrati anche se il seed fallisce,
+ * così il renderer non resta sul messaggio demo.
+ */
+function bootstrapLocalDataEngine(): void {
+  let engineReady = false;
+  try {
+    const engine = DataEngine.getInstance();
+    const status = engine.start(app.getPath("userData"));
+    engine.clients.setSyncHooks(firestoreClientSyncHooks);
+    engine.appointments.setSyncHooks(firestoreAppointmentSyncHooks);
+    engine.services.setSyncHooks(firestoreServiceSyncHooks);
+
+    const seededClients = ClientService.getInstance().ensureDemoSeed();
+    const seededAppts = AppointmentService.getInstance().ensureDemoSeed();
+    const seededServices = ServiceService.getInstance().ensureDemoSeed();
+    engineReady = status.ready;
+
+    if (status.ready) {
+      console.info(
+        `[NovaBeauty] DataEngine ready · ${status.tables.length}/${status.expectedTables.length} tables · ${status.dbPath}` +
+          (seededClients > 0 ? ` · seeded ${seededClients} clients` : "") +
+          (seededAppts > 0 ? ` · seeded ${seededAppts} appointments` : "") +
+          (seededServices > 0 ? ` · seeded ${seededServices} services` : "")
+      );
+    }
+  } catch (error) {
+    console.error("[NovaBeauty] DataEngine init failed:", error);
+  }
+
+  try {
+    registerClientIpcHandlers();
+    registerAppointmentIpcHandlers();
+    registerServiceIpcHandlers();
+    console.info(
+      `[NovaBeauty] IPC registrato (appointments + clients + services)` +
+        (engineReady ? "" : " · DB non ready: i create restituiranno l'errore repository")
+    );
+  } catch (error) {
+    console.error("[NovaBeauty] Registrazione IPC fallita:", error);
+  }
+}
 
 function createWindow(): void {
+  const preload = resolvePreloadPath();
   const mainWindow = new BrowserWindow({
     width: 1600,
     height: 900,
@@ -15,10 +92,15 @@ function createWindow(): void {
     backgroundColor: "#F7F2F4",
     autoHideMenuBar: true,
     webPreferences: {
-      preload: join(__dirname, "../preload/index.mjs"),
+      preload,
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: false
     }
+  });
+
+  mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
+    console.error("[NovaBeauty] preload-error:", preloadPath, error);
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -38,7 +120,7 @@ function createWindow(): void {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
-    mainWindow.loadFile(join(__dirname, "../../renderer/index.html"));
+    mainWindow.loadFile(join(mainDir(), "../../renderer/index.html"));
   }
 
   mainWindow.once("ready-to-show", () => {
@@ -51,6 +133,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  bootstrapLocalDataEngine();
   createWindow();
 
   app.on("activate", () => {
@@ -59,6 +142,12 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin") {
+    try {
+      DataEngine.getInstance().stop();
+    } catch {
+      /* ignore */
+    }
+    app.quit();
+  }
 });
-

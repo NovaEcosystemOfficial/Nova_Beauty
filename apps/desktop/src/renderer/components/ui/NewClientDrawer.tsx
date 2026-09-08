@@ -56,9 +56,12 @@ export default function NewClientDrawer({
         onSubmit={(e) => {
           e.preventDefault();
           if (!canSave) return;
-          const id = createClient(draft);
-          onCreated(id);
-          onClose();
+          void (async () => {
+            const id = await createClient(draft);
+            if (!id) return;
+            onCreated(id);
+            onClose();
+          })();
         }}
       >
         <div className="nb-drawerRow2">

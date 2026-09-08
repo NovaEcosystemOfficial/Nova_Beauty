@@ -17,6 +17,7 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts"]
+  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/renderer/**/*.d.ts", "src/core/**/*.ts", "src/models/**/*.ts"],
+  "exclude": ["src/database/**", "src/repositories/**", "src/services/**"]
 }
 
