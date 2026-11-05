@@ -4,18 +4,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerAppointmentIpcHandlers } from "./appointmentIpc";
 import { registerClientIpcHandlers } from "./clientIpc";
+import { registerDiaryIpcHandlers } from "./diaryIpc";
 import { registerInventoryIpcHandlers } from "./inventoryIpc";
 import { registerServiceIpcHandlers } from "./serviceIpc";
+import { registerStudioIpcHandlers } from "./studioIpc";
 import { registerSupplierIpcHandlers } from "./supplierIpc";
-import { AppointmentService } from "../../src/services/AppointmentService";
 import { firestoreAppointmentSyncHooks } from "../../src/services/appointmentSyncHooks";
-import { ClientService } from "../../src/services/ClientService";
 import { firestoreClientSyncHooks } from "../../src/services/clientSyncHooks";
-import { InventoryService } from "../../src/services/InventoryService";
 import { firestoreInventorySyncHooks } from "../../src/services/inventorySyncHooks";
-import { ServiceService } from "../../src/services/ServiceService";
 import { firestoreServiceSyncHooks } from "../../src/services/serviceSyncHooks";
-import { SupplierService } from "../../src/services/SupplierService";
 import { firestoreSupplierSyncHooks } from "../../src/services/supplierSyncHooks";
 import { DataEngine } from "../../src/services/DataEngine";
 
@@ -43,9 +40,8 @@ function resolvePreloadPath(): string {
 }
 
 /**
- * Avvia SQLite + registra IPC clienti/appuntamenti.
- * I handler IPC vengono registrati anche se il seed fallisce,
- * così il renderer non resta sul messaggio demo.
+ * Avvia SQLite e registra gli IPC.
+ * Il database parte vuoto: i dati di esempio si caricano solo da `nb:sample:load`.
  */
 function bootstrapLocalDataEngine(): void {
   let engineReady = false;
@@ -57,22 +53,11 @@ function bootstrapLocalDataEngine(): void {
     engine.services.setSyncHooks(firestoreServiceSyncHooks);
     engine.inventory.setSyncHooks(firestoreInventorySyncHooks);
     engine.suppliers.setSyncHooks(firestoreSupplierSyncHooks);
-
-    const seededClients = ClientService.getInstance().ensureDemoSeed();
-    const seededAppts = AppointmentService.getInstance().ensureDemoSeed();
-    const seededServices = ServiceService.getInstance().ensureDemoSeed();
-    const seededProducts = InventoryService.getInstance().ensureDemoSeed();
-    const seededSuppliers = SupplierService.getInstance().ensureDemoSeed();
     engineReady = status.ready;
 
     if (status.ready) {
       console.info(
-        `[NovaBeauty] DataEngine ready · ${status.tables.length}/${status.expectedTables.length} tables · ${status.dbPath}` +
-          (seededClients > 0 ? ` · seeded ${seededClients} clients` : "") +
-          (seededAppts > 0 ? ` · seeded ${seededAppts} appointments` : "") +
-          (seededServices > 0 ? ` · seeded ${seededServices} services` : "") +
-          (seededProducts > 0 ? ` · seeded ${seededProducts} products` : "") +
-          (seededSuppliers > 0 ? ` · seeded ${seededSuppliers} suppliers` : "")
+        `[NovaBeauty] DataEngine ready · ${status.tables.length}/${status.expectedTables.length} tables · ${status.dbPath}`
       );
     }
   } catch (error) {
@@ -85,8 +70,10 @@ function bootstrapLocalDataEngine(): void {
     registerServiceIpcHandlers();
     registerInventoryIpcHandlers();
     registerSupplierIpcHandlers();
+    registerStudioIpcHandlers();
+    registerDiaryIpcHandlers();
     console.info(
-      `[NovaBeauty] IPC registrato (appointments + clients + services + inventory + suppliers)` +
+      `[NovaBeauty] IPC registrato (appointments + clients + services + inventory + suppliers + studio + diary)` +
         (engineReady ? "" : " · DB non ready: i create restituiranno l'errore repository")
     );
   } catch (error) {

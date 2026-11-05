@@ -251,7 +251,7 @@ export class AppointmentService {
     return DataEngine.getInstance().appointments;
   }
 
-  /** Se la tabella è vuota, importa gli appuntamenti demo. */
+  /** Importa gli appuntamenti di esempio solo se la tabella è vuota. Chiamato dal comando esplicito. */
   ensureDemoSeed(): number {
     const repo = this.repo();
     if (repo.count() > 0) return 0;
@@ -290,7 +290,6 @@ export class AppointmentService {
 
   list(query: AppointmentListQuery = {}): IpcResult<AppointmentDto[]> {
     try {
-      this.ensureDemoSeed();
       return { ok: true, data: this.repo().list(query).map((a) => a.toDto()) };
     } catch (error) {
       return wrapError(error);

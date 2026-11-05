@@ -14,6 +14,29 @@ export type CenterData = EntityTimestamps & {
   ownerName: string;
 };
 
+/** Profilo studio senza i timestamp, usato da IPC e UI. */
+export type CenterProfile = {
+  name: string;
+  slogan: string;
+  address: string;
+  phone: string;
+  email: string;
+  logoUrl: string;
+  ownerName: string;
+};
+
+export const DEFAULT_CENTER_NAME = "Il mio studio";
+
+export const DEFAULT_CENTER_PROFILE: CenterProfile = {
+  name: DEFAULT_CENTER_NAME,
+  slogan: "",
+  address: "",
+  phone: "",
+  email: "",
+  logoUrl: "",
+  ownerName: ""
+};
+
 export class CenterModel {
   readonly id: string;
   readonly createdAt: string;

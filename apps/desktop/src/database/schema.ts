@@ -4,7 +4,7 @@
  */
 
 /** Versione schema corrente (per future migration). */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /**
  * DDL iniziale. `IF NOT EXISTS` rende l'init idempotente al riavvio.
@@ -177,6 +177,22 @@ CREATE TABLE IF NOT EXISTS backups (
   note TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS diary_entries (
+  id TEXT PRIMARY KEY NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  client_id TEXT NOT NULL DEFAULT '',
+  occurred_at TEXT NOT NULL DEFAULT '',
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  tags_json TEXT NOT NULL DEFAULT '[]',
+  appointment_id TEXT NOT NULL DEFAULT '',
+  service_name TEXT NOT NULL DEFAULT '',
+  operator_name TEXT NOT NULL DEFAULT '',
+  photos_before_json TEXT NOT NULL DEFAULT '[]',
+  photos_after_json TEXT NOT NULL DEFAULT '[]'
+);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY NOT NULL,
   created_at TEXT NOT NULL,
@@ -192,6 +208,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 /** Elenco tabelle di dominio (utile per health-check). */
 export const DOMAIN_TABLES = [
   "clients",
+  "diary_entries",
   "operators",
   "appointments",
   "services",

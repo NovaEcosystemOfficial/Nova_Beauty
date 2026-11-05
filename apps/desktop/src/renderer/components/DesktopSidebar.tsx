@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import type { ComponentType } from "react";
+import { useDemoWorkflow } from "../demo/DemoWorkflowContext";
 
 export type DesktopNavKey =
   | "dashboard"
@@ -45,7 +46,18 @@ type DesktopSidebarProps = {
   onNavigate: (key: DesktopNavKey) => void;
 };
 
+function identityInitials(ownerName: string, studioName: string): string {
+  const source = ownerName.trim() || studioName.trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "S";
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+}
+
 export default function DesktopSidebar({ active, onNavigate }: DesktopSidebarProps) {
+  const { studioName, studioOwner } = useDemoWorkflow();
+  const ownerLabel = studioOwner.trim() || "Titolare";
+  const studioLabel = studioName.trim() || "Studio";
   const operational = items.slice(0, 6);
   const studio = items.slice(6);
 
@@ -109,11 +121,11 @@ export default function DesktopSidebar({ active, onNavigate }: DesktopSidebarPro
 
       <div className="nb-sidebarUser">
         <div className="nb-sidebarUserAvatar" aria-hidden="true">
-          F
+          {identityInitials(studioOwner, studioName)}
         </div>
         <div className="nb-sidebarUserMeta">
-          <div className="nb-sidebarUserName">Fabio</div>
-          <div className="nb-sidebarUserRole">Titolare studio</div>
+          <div className="nb-sidebarUserName">{ownerLabel}</div>
+          <div className="nb-sidebarUserRole">{studioLabel}</div>
         </div>
         <span className="nb-sidebarUserStatus" aria-label="Online" />
       </div>

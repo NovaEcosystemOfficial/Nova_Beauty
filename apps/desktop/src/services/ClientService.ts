@@ -217,7 +217,7 @@ export class ClientService {
     return DataEngine.getInstance().clients;
   }
 
-  /** Se la tabella è vuota, importa i clienti demo Sprint 0. */
+  /** Importa i clienti di esempio solo se la tabella è vuota. Chiamato dal comando esplicito. */
   ensureDemoSeed(): number {
     const repo = this.repo();
     if (repo.count() > 0) return 0;
@@ -243,7 +243,6 @@ export class ClientService {
 
   list(query: ClientListQuery = {}): IpcResult<ClientDto[]> {
     try {
-      this.ensureDemoSeed();
       const rows = this.repo().list(query).map((c) => c.toDto());
       return { ok: true, data: rows };
     } catch (error) {
@@ -281,6 +280,7 @@ export class ClientService {
   remove(id: string): IpcResult<{ id: string }> {
     try {
       this.repo().delete(id);
+      DataEngine.getInstance().diary.deleteByClient(id);
       return { ok: true, data: { id } };
     } catch (error) {
       return wrapError(error);

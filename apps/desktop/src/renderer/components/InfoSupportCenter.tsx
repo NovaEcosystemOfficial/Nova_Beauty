@@ -14,6 +14,8 @@ import {
   Sparkles
 } from "lucide-react";
 import clsx from "clsx";
+import { useState } from "react";
+import { useDemoWorkflow } from "../demo/DemoWorkflowContext";
 
 const SOFTWARE_FACTS = [
   { label: "Versione", value: "0.1.0" },
@@ -59,6 +61,19 @@ const ROADMAP = {
 };
 
 export default function InfoSupportCenter() {
+  const { loadSampleData } = useDemoWorkflow();
+  const [loadingSample, setLoadingSample] = useState(false);
+
+  const onLoadSample = async () => {
+    if (loadingSample) return;
+    setLoadingSample(true);
+    try {
+      await loadSampleData();
+    } finally {
+      setLoadingSample(false);
+    }
+  };
+
   const scrollToRoadmap = () => {
     document.getElementById("info-roadmap")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -76,6 +91,24 @@ export default function InfoSupportCenter() {
           </p>
         </div>
       </header>
+
+      <article className="nb-infoSample">
+        <div>
+          <h3 className="nb-infoCardTitle">Dati di esempio</h3>
+          <p className="nb-infoSampleText">
+            Riempie solo clienti, agenda, servizi, magazzino e fornitori se quelle sezioni sono vuote.
+            Non sostituisce i dati già inseriti.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="nb-newBtn"
+          onClick={() => void onLoadSample()}
+          disabled={loadingSample}
+        >
+          {loadingSample ? "Caricamento…" : "Carica dati di esempio"}
+        </button>
+      </article>
 
       <article className="nb-infoStatus">
         <div className="nb-infoStatusMain">

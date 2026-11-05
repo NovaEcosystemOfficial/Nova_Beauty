@@ -27,6 +27,8 @@ import type {
   ServiceListQuery,
   ServiceUpdateInput
 } from "../../models/Service";
+import type { CenterProfile } from "../../models/Center";
+import type { DiaryEntryCreateInput, DiaryEntryData } from "../../models/DiaryEntry";
 import type {
   SupplierCreateInput,
   SupplierDto,
@@ -80,12 +82,34 @@ export type NovaBeautySuppliersApi = {
   delete: (id: string) => Promise<ClientIpcResult<{ id: string }>>;
 };
 
+export type SampleSeedCounts = {
+  clients: number;
+  appointments: number;
+  services: number;
+  products: number;
+  suppliers: number;
+};
+
+export type NovaBeautyStudioApi = {
+  get: () => Promise<ClientIpcResult<CenterProfile>>;
+  update: (patch: Partial<CenterProfile>) => Promise<ClientIpcResult<CenterProfile>>;
+  loadSample: () => Promise<ClientIpcResult<SampleSeedCounts>>;
+};
+
+export type NovaBeautyDiaryApi = {
+  list: (clientId: string) => Promise<ClientIpcResult<DiaryEntryData[]>>;
+  create: (input: DiaryEntryCreateInput) => Promise<ClientIpcResult<DiaryEntryData>>;
+  delete: (id: string) => Promise<ClientIpcResult<{ id: string }>>;
+};
+
 export type NovaBeautyApi = {
   clients: NovaBeautyClientsApi;
   appointments: NovaBeautyAppointmentsApi;
   services: NovaBeautyServicesApi;
   inventory: NovaBeautyInventoryApi;
   suppliers: NovaBeautySuppliersApi;
+  studio: NovaBeautyStudioApi;
+  diary: NovaBeautyDiaryApi;
 };
 
 export type NbLocalApi = {
@@ -95,6 +119,8 @@ export type NbLocalApi = {
   services?: NovaBeautyServicesApi;
   inventory?: NovaBeautyInventoryApi;
   suppliers?: NovaBeautySuppliersApi;
+  studio?: NovaBeautyStudioApi;
+  diary?: NovaBeautyDiaryApi;
 };
 
 declare global {

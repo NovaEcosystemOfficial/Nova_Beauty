@@ -266,7 +266,7 @@ export class ServiceService {
     return DataEngine.getInstance().services;
   }
 
-  /** Se la tabella è vuota, importa il catalogo iniziale in SQLite. */
+  /** Importa il catalogo di esempio solo se la tabella è vuota. Chiamato dal comando esplicito. */
   ensureDemoSeed(): number {
     const repo = this.repo();
     if (repo.count() > 0) return 0;
@@ -290,7 +290,6 @@ export class ServiceService {
 
   list(query: ServiceListQuery = {}): IpcResult<ServiceDto[]> {
     try {
-      this.ensureDemoSeed();
       return { ok: true, data: this.repo().list(query).map((s) => s.toDto()) };
     } catch (error) {
       return wrapError(error);

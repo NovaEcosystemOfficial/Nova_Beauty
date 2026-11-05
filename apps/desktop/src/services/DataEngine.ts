@@ -7,6 +7,7 @@ import { DatabaseService } from "../database/DatabaseService";
 import { DOMAIN_TABLES } from "../database/schema";
 import { AppointmentRepository } from "../repositories/AppointmentRepository";
 import { ClientRepository } from "../repositories/ClientRepository";
+import { DiaryRepository } from "../repositories/DiaryRepository";
 import { InventoryRepository } from "../repositories/InventoryRepository";
 import { ServiceRepository } from "../repositories/ServiceRepository";
 import { SettingsRepository } from "../repositories/SettingsRepository";
@@ -23,6 +24,7 @@ export class DataEngine {
   private static instance: DataEngine | null = null;
 
   readonly clients: ClientRepository;
+  readonly diary: DiaryRepository;
   readonly appointments: AppointmentRepository;
   readonly inventory: InventoryRepository;
   readonly services: ServiceRepository;
@@ -31,6 +33,7 @@ export class DataEngine {
 
   private constructor() {
     this.clients = new ClientRepository();
+    this.diary = new DiaryRepository();
     this.appointments = new AppointmentRepository();
     this.inventory = new InventoryRepository();
     this.services = new ServiceRepository();
@@ -52,6 +55,7 @@ export class DataEngine {
   start(userDataPath: string): DataEngineStatus {
     const db = DatabaseService.getInstance();
     db.initialize(userDataPath);
+    this.settings.ensureCenter();
     return this.status();
   }
 

@@ -9,8 +9,9 @@ import {
   Users
 } from "lucide-react";
 import clsx from "clsx";
-import { useRef, type ChangeEvent, type ComponentType, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from "react";
 import { useDemoWorkflow } from "../demo/DemoWorkflowContext";
+import { listProducts } from "../data/inventoryApi";
 
 type Tone = "primary" | "gold" | "mint" | "lavender";
 
@@ -86,32 +87,50 @@ function Panel({
   );
 }
 
-const alerts = [
-  { name: "Crema viso", level: "Scorta bassa", qty: "3 / min 8", severity: "low" },
-  { name: "Gel refill", level: "Scorta bassa", qty: "2 / min 6", severity: "low" },
-  { name: "Maschera", level: "Esaurito", qty: "0 / min 4", severity: "out" }
-] as const;
+function euro(value: number) {
+  return new Intl.NumberFormat("it-IT", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0
+  }).format(value);
+}
 
 export default function DemoDashboard() {
-  const {
-    appointmentsToday,
-    revenueExpected,
-    revenueCompleted,
-    activities,
-    appointments,
-    inventoryScaledHint,
-    studioName,
-    studioLogoUrl,
-    setStudioLogoUrl,
-    pushToast
-  } = useDemoWorkflow();
+  const { activities, appointments, clients, studioName, studioLogoUrl, setStudioLogoUrl, pushToast } =
+    useDemoWorkflow();
+  const [lowStock, setLowStock] = useState<
+    Array<{ id: string; name: string; quantity: number; minQuantity: number }>
+  >([]);
 
   const fileRef = useRef<HTMLInputElement>(null);
 
   const todayAgenda = appointments
     .filter((a) => a.dayOffset === 0 && a.status !== "annullato")
-    .sort((a, b) => a.startMin - b.startMin)
-    .slice(0, 6);
+    .sort((a, b) => a.startMin - b.startMin);
+
+  const todayVisible = todayAgenda.slice(0, 6);
+  const expectedRevenue = todayAgenda.reduce((sum, appointment) => sum + appointment.price, 0);
+  const completedRevenue = todayAgenda
+    .filter((appointment) => appointment.status === "completato")
+    .reduce((sum, appointment) => sum + appointment.price, 0);
+  const activeClients = clients.filter((client) => client.status === "attivo").length;
+
+  useEffect(() => {
+    void (async () => {
+      const result = await listProducts();
+      if (!result.ok) return;
+      setLowStock(
+        result.data
+          .filter((product) => product.quantity <= product.minQuantity)
+          .map((product) => ({
+            id: product.id,
+            name: product.name,
+            quantity: product.quantity,
+            minQuantity: product.minQuantity
+          }))
+      );
+    })();
+  }, []);
 
   const onPickLogo = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -136,39 +155,45 @@ export default function DemoDashboard() {
       <div className="nb-topStats">
         <StatCard
           label="Appuntamenti oggi"
-          value={String(appointmentsToday)}
-          helper="Workflow demo live"
+          value={String(todayAgenda.length)}
+          helper="Agenda di oggi"
           icon={CalendarDays}
           tone="primary"
           pulse
         />
         <StatCard
           label="Incasso oggi"
-          value={`€${revenueCompleted || Math.min(revenueExpected, 240)}`}
+          value={euro(completedRevenue || expectedRevenue)}
           helper={
-            revenueCompleted > 0
-              ? `Completato €${revenueCompleted} · previsto €${revenueExpected}`
-              : `Previsto €${revenueExpected}`
+            completedRevenue > 0
+              ? `Completato ${euro(completedRevenue)} · previsto ${euro(expectedRevenue)}`
+              : `Previsto ${euro(expectedRevenue)}`
           }
           icon={Euro}
           tone="gold"
-          pulse={revenueCompleted > 0}
+          pulse={completedRevenue > 0}
         />
-        <StatCard label="Clienti attivi" value="42" helper="5 nuovi questo mese" icon={Users} tone="mint" />
+        <StatCard
+          label="Clienti attivi"
+          value={String(activeClients)}
+          helper="Anagrafica locale"
+          icon={Users}
+          tone="mint"
+        />
         <StatCard
           label="Prodotti da ordinare"
-          value={inventoryScaledHint ? "7" : "6"}
-          helper={inventoryScaledHint ? "Magazzino scalato · demo" : "3 sotto soglia critica"}
+          value={String(lowStock.length)}
+          helper={lowStock.length ? "Sotto la scorta minima" : "Scorte sopra la soglia"}
           icon={PackageSearch}
           tone="lavender"
-          pulse={inventoryScaledHint}
+          pulse={lowStock.length > 0}
         />
       </div>
 
       <div className="nb-middleGrid">
         <Panel title="Agenda di oggi" caption="Timeline operativa" icon={CalendarDays} action="Apri agenda">
           <div className="nb-timeline">
-            {todayAgenda.map((row) => (
+            {todayVisible.map((row) => (
               <div key={row.id} className={clsx("nb-timelineItem", row.isNew && "isAppear")}>
                 <div className="nb-timelineRail" aria-hidden="true">
                   <span className="nb-timelineDot" />
@@ -212,24 +237,24 @@ export default function DemoDashboard() {
 
         <Panel title="Alert magazzino" caption="Scorte critiche" icon={AlertTriangle} action="Da ordinare">
           <div className="nb-alertList">
-            {alerts.map((row) => (
-              <div key={row.name} className={`nb-alertItem severity-${row.severity}`}>
-                <div className="nb-alertCopy">
-                  <div className="nb-alertName">{row.name}</div>
-                  <div className="nb-alertQty">{row.qty}</div>
+            {lowStock.length ? (
+              lowStock.map((row) => (
+                <div
+                  key={row.id}
+                  className={`nb-alertItem severity-${row.quantity <= 0 ? "out" : "low"}`}
+                >
+                  <div className="nb-alertCopy">
+                    <div className="nb-alertName">{row.name}</div>
+                    <div className="nb-alertQty">
+                      {row.quantity} / min {row.minQuantity}
+                    </div>
+                  </div>
+                  <span className="nb-alertBadge">{row.quantity <= 0 ? "Esaurito" : "Sotto soglia"}</span>
                 </div>
-                <span className="nb-alertBadge">{row.level}</span>
-              </div>
-            ))}
-            {inventoryScaledHint ? (
-              <div className="nb-alertItem severity-low isAppear">
-                <div className="nb-alertCopy">
-                  <div className="nb-alertName">Scarico demo</div>
-                  <div className="nb-alertQty">Prodotto usato in trattamento</div>
-                </div>
-                <span className="nb-alertBadge">Aggiornato</span>
-              </div>
-            ) : null}
+              ))
+            ) : (
+              <p className="nb-clientSheetEmptyInline">Nessun prodotto sotto scorta.</p>
+            )}
           </div>
         </Panel>
       </div>

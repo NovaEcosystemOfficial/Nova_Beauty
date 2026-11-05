@@ -49,12 +49,18 @@ const SUPPLIER_CHANNELS = [
   "nb:suppliers:delete"
 ] as const;
 
+const STUDIO_CHANNELS = ["nb:center:get", "nb:center:update", "nb:sample:load"] as const;
+
+const DIARY_CHANNELS = ["nb:diary:list", "nb:diary:create", "nb:diary:delete"] as const;
+
 const ALLOWED = new Set<string>([
   ...APPOINTMENT_CHANNELS,
   ...CLIENT_CHANNELS,
   ...SERVICE_CHANNELS,
   ...INVENTORY_CHANNELS,
-  ...SUPPLIER_CHANNELS
+  ...SUPPLIER_CHANNELS,
+  ...STUDIO_CHANNELS,
+  ...DIARY_CHANNELS
 ]);
 
 const clientsApi = {
@@ -126,6 +132,22 @@ const suppliersApi = {
     ipcRenderer.invoke("nb:suppliers:delete", id)
 };
 
+const diaryApi = {
+  list: (clientId: string): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:diary:list", clientId),
+  create: (input: unknown): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:diary:create", input),
+  delete: (id: string): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:diary:delete", id)
+};
+
+const studioApi = {
+  get: (): Promise<ClientIpcResult<unknown>> => ipcRenderer.invoke("nb:center:get"),
+  update: (patch: unknown): Promise<ClientIpcResult<unknown>> =>
+    ipcRenderer.invoke("nb:center:update", patch ?? {}),
+  loadSample: (): Promise<ClientIpcResult<unknown>> => ipcRenderer.invoke("nb:sample:load")
+};
+
 function invokeLocal(channel: string, ...args: unknown[]): Promise<unknown> {
   if (!ALLOWED.has(channel)) {
     return Promise.reject(new Error(`Canale IPC non consentito: ${channel}`));
@@ -139,7 +161,9 @@ try {
     appointments: appointmentsApi,
     services: servicesApi,
     inventory: inventoryApi,
-    suppliers: suppliersApi
+    suppliers: suppliersApi,
+    studio: studioApi,
+    diary: diaryApi
   });
   contextBridge.exposeInMainWorld("nbLocal", {
     invoke: invokeLocal,
@@ -147,9 +171,11 @@ try {
     clients: clientsApi,
     services: servicesApi,
     inventory: inventoryApi,
-    suppliers: suppliersApi
+    suppliers: suppliersApi,
+    studio: studioApi,
+    diary: diaryApi
   });
-  console.info("[NovaBeauty preload] bridge esposto (novaBeauty + nbLocal + suppliers)");
+  console.info("[NovaBeauty preload] bridge esposto (novaBeauty + nbLocal + studio + diary)");
 } catch (error) {
   console.error("[NovaBeauty preload] exposeInMainWorld fallito:", error);
 }

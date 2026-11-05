@@ -4,10 +4,16 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode
 } from "react";
 import type { AppointmentListQuery, AppointmentSort } from "../../models/Appointment";
+import {
+  DEFAULT_CENTER_NAME,
+  DEFAULT_CENTER_PROFILE,
+  type CenterProfile
+} from "../../models/Center";
 import { uiStatusToDomain } from "../../models/Appointment";
 import type { ServiceListQuery, ServiceSort } from "../../models/Service";
 import {
@@ -39,6 +45,7 @@ import {
   supplierMetaJson,
   updateSupplierRemote
 } from "../data/suppliersApi";
+import { getCenter, loadSampleDataRemote, updateCenter } from "../data/studioApi";
 import type { ClientListQuery, ClientSort } from "../../models/Client";
 
 export type ApptStatus = "confermato" | "da_confermare" | "completato" | "annullato";
@@ -297,9 +304,17 @@ type DemoWorkflowValue = {
   inventoryScaledHint: boolean;
   reportsPulse: boolean;
   studioName: string;
+  studioOwner: string;
+  studioSlogan: string;
+  studioAddress: string;
+  studioPhone: string;
+  studioEmail: string;
   studioLogoUrl: string | null;
   setStudioName: (name: string) => void;
   setStudioLogoUrl: (url: string | null) => void;
+  saveStudioIdentity: (patch: Partial<CenterProfile>) => Promise<void>;
+  loadSampleData: () => Promise<void>;
+  sampleRevision: number;
   newApptDrawerOpen: boolean;
   newApptClientId: string | null;
   newClientWizardOpen: boolean;
@@ -705,7 +720,7 @@ function nowTimeLabel(): string {
 const DemoWorkflowContext = createContext<DemoWorkflowValue | null>(null);
 
 export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
-  const [clients, setClients] = useState(INITIAL_CLIENTS);
+  const [clients, setClients] = useState<WorkflowClient[]>([]);
   const [clientSort, setClientSort] = useState<ClientSort>("name_asc");
   const [services, setServices] = useState<WorkflowService[]>([]);
   const [serviceSort, setServiceSort] = useState<ServiceSort>("name_asc");
@@ -719,8 +734,15 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
   const [revenueCompleted, setRevenueCompleted] = useState(0);
   const [inventoryScaledHint, setInventoryScaledHint] = useState(false);
   const [reportsPulse, setReportsPulse] = useState(false);
-  const [studioName, setStudioName] = useState("NovaBeauty Milano Centro");
-  const [studioLogoUrl, setStudioLogoUrl] = useState<string | null>(null);
+  const [studioName, setStudioNameState] = useState(DEFAULT_CENTER_NAME);
+  const [studioOwner, setStudioOwnerState] = useState("");
+  const [studioSlogan, setStudioSloganState] = useState("");
+  const [studioAddress, setStudioAddressState] = useState("");
+  const [studioPhone, setStudioPhoneState] = useState("");
+  const [studioEmail, setStudioEmailState] = useState("");
+  const [studioLogoUrl, setStudioLogoUrlState] = useState<string | null>(null);
+  const [sampleRevision, setSampleRevision] = useState(0);
+  const centerRef = useRef<CenterProfile>(DEFAULT_CENTER_PROFILE);
   const [newApptDrawerOpen, setNewApptDrawerOpen] = useState(false);
   const [newApptClientId, setNewApptClientId] = useState<string | null>(null);
   const [newClientWizardOpen, setNewClientWizardOpen] = useState(false);
@@ -738,6 +760,60 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3200);
   }, []);
+
+  const applyCenter = useCallback((profile: CenterProfile) => {
+    centerRef.current = profile;
+    setStudioNameState(profile.name.trim() || DEFAULT_CENTER_NAME);
+    setStudioOwnerState(profile.ownerName);
+    setStudioSloganState(profile.slogan);
+    setStudioAddressState(profile.address);
+    setStudioPhoneState(profile.phone);
+    setStudioEmailState(profile.email);
+    setStudioLogoUrlState(profile.logoUrl || null);
+  }, []);
+
+  const saveStudioIdentity = useCallback(
+    async (patch: Partial<CenterProfile>) => {
+      const merged: CenterProfile = {
+        ...centerRef.current,
+        ...patch,
+        name: (patch.name ?? centerRef.current.name).trim() || DEFAULT_CENTER_NAME,
+        ownerName: (patch.ownerName ?? centerRef.current.ownerName).trim()
+      };
+      applyCenter(merged);
+      const result = await updateCenter(merged);
+      if (!result.ok) {
+        if (result.code !== "NO_IPC") {
+          pushToast(result.message || "Errore salvataggio studio");
+        }
+        return;
+      }
+      applyCenter(result.data);
+    },
+    [applyCenter, pushToast]
+  );
+
+  const setStudioName = useCallback(
+    (name: string) => {
+      void saveStudioIdentity({ name });
+    },
+    [saveStudioIdentity]
+  );
+
+  const setStudioLogoUrl = useCallback(
+    (url: string | null) => {
+      void saveStudioIdentity({ logoUrl: url ?? "" });
+    },
+    [saveStudioIdentity]
+  );
+
+  useEffect(() => {
+    void (async () => {
+      const result = await getCenter();
+      if (!result.ok) return;
+      applyCenter(result.data);
+    })();
+  }, [applyCenter]);
 
   const pushActivity = useCallback((text: string) => {
     const item: ActivityItem = {
@@ -844,6 +920,32 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void reloadSuppliers();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps -- boot once
+
+  const loadSampleData = useCallback(async () => {
+    const result = await loadSampleDataRemote();
+    if (!result.ok) {
+      if (result.code !== "NO_IPC") {
+        pushToast(result.message || "Impossibile caricare i dati di esempio");
+      }
+      return;
+    }
+    await reloadClients();
+    await reloadAppointments();
+    await reloadServices();
+    await reloadSuppliers();
+    setSampleRevision((current) => current + 1);
+    const total =
+      result.data.clients +
+      result.data.appointments +
+      result.data.services +
+      result.data.products +
+      result.data.suppliers;
+    pushToast(
+      total > 0
+        ? "Dati di esempio caricati nelle sezioni vuote"
+        : "Le sezioni hanno già dei dati: l'esempio non ha sostituito nulla"
+    );
+  }, [pushToast, reloadAppointments, reloadClients, reloadServices, reloadSuppliers]);
 
   const createClient = useCallback(
     async (draft: NewClientDraft) => {
@@ -1493,9 +1595,17 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
       inventoryScaledHint,
       reportsPulse,
       studioName,
+      studioOwner,
+      studioSlogan,
+      studioAddress,
+      studioPhone,
+      studioEmail,
       studioLogoUrl,
       setStudioName,
       setStudioLogoUrl,
+      saveStudioIdentity,
+      loadSampleData,
+      sampleRevision,
       newApptDrawerOpen,
       newApptClientId,
       newClientWizardOpen,
@@ -1557,7 +1667,17 @@ export function DemoWorkflowProvider({ children }: { children: ReactNode }) {
       inventoryScaledHint,
       reportsPulse,
       studioName,
+      studioOwner,
+      studioSlogan,
+      studioAddress,
+      studioPhone,
+      studioEmail,
       studioLogoUrl,
+      setStudioName,
+      setStudioLogoUrl,
+      saveStudioIdentity,
+      loadSampleData,
+      sampleRevision,
       newApptDrawerOpen,
       newApptClientId,
       newClientWizardOpen,

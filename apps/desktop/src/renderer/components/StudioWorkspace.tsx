@@ -67,6 +67,7 @@ type DemoCabin = {
 
 type StudioProfile = {
   businessName: string;
+  ownerName: string;
   legalName: string;
   vat: string;
   address: string;
@@ -312,8 +313,16 @@ function displayCabinStatus(s: CabinStatus): string {
 }
 
 export default function StudioWorkspace() {
-  const { studioName, studioLogoUrl, setStudioName, setStudioLogoUrl, pushToast } =
-    useDemoWorkflow();
+  const {
+    studioName,
+    studioOwner,
+    studioAddress,
+    studioPhone,
+    studioEmail,
+    studioLogoUrl,
+    saveStudioIdentity,
+    pushToast
+  } = useDemoWorkflow();
 
   const [section, setSection] = useState<StudioSection>("team");
   const [operators, setOperators] = useState(INITIAL_OPERATORS);
@@ -323,14 +332,15 @@ export default function StudioWorkspace() {
 
   const [profile, setProfile] = useState<StudioProfile>({
     businessName: studioName,
-    legalName: "NovaBeauty S.r.l.",
-    vat: "IT12345678901",
-    address: "Via della Bellezza 12, Milano",
-    phone: "+39 02 1234 5678",
-    email: "studio@novabeauty.it",
-    website: "https://novabeauty.it",
-    social: "@novabeauty",
-    description: "Centro estetico specialty viso, corpo e wellness a Milano."
+    ownerName: studioOwner,
+    legalName: "",
+    vat: "",
+    address: studioAddress,
+    phone: studioPhone,
+    email: studioEmail,
+    website: "",
+    social: "",
+    description: ""
   });
 
   const [editStudioOpen, setEditStudioOpen] = useState(false);
@@ -362,8 +372,15 @@ export default function StudioWorkspace() {
   });
 
   useEffect(() => {
-    setProfile((p) => ({ ...p, businessName: studioName }));
-  }, [studioName]);
+    setProfile((p) => ({
+      ...p,
+      businessName: studioName,
+      ownerName: studioOwner,
+      address: studioAddress,
+      phone: studioPhone,
+      email: studioEmail
+    }));
+  }, [studioAddress, studioEmail, studioName, studioOwner, studioPhone]);
 
   const selectedOp = operators.find((o) => o.id === selectedOpId) ?? operators[0];
   const selectedCabin = cabins.find((c) => c.id === selectedCabinId) ?? cabins[0];
@@ -502,8 +519,14 @@ export default function StudioWorkspace() {
           onClose={() => setEditStudioOpen(false)}
           onSave={(next, logo) => {
             setProfile(next);
-            setStudioName(next.businessName.trim() || studioName);
-            setStudioLogoUrl(logo);
+            void saveStudioIdentity({
+              name: next.businessName.trim() || studioName,
+              ownerName: next.ownerName.trim(),
+              address: next.address.trim(),
+              phone: next.phone.trim(),
+              email: next.email.trim(),
+              logoUrl: logo ?? ""
+            });
             setEditStudioOpen(false);
             pushToast("Informazioni studio aggiornate");
           }}
@@ -878,7 +901,7 @@ function InfoSection({
       <div className="nb-stTeamToolbar">
         <div>
           <h2 className="nb-stSectionTitle">Informazioni Studio</h2>
-          <p className="nb-stSectionSub">Identità del centro estetico · dati demo</p>
+          <p className="nb-stSectionSub">Identità del centro estetico</p>
         </div>
         <button type="button" className="nb-newBtn nb-stNewBtn" onClick={onEdit}>
           <Pencil className="nb-newBtnIcon" aria-hidden={true} />
@@ -902,7 +925,8 @@ function InfoSection({
 
       <div className="nb-stOpDetailGrid nb-stInfoGrid">
         <Field label="Nome attività" value={profile.businessName} />
-        <Field label="Ragione sociale" value={profile.legalName} />
+        <Field label="Titolare" value={profile.ownerName || "—"} />
+        <Field label="Ragione sociale" value={profile.legalName || "—"} />
         <Field label="Telefono" value={profile.phone} />
         <Field label="Email" value={profile.email} />
         <Field label="Indirizzo" value={profile.address} />
@@ -1350,6 +1374,7 @@ function EditStudioDialog({
           {(
             [
               ["businessName", "Nome attività"],
+              ["ownerName", "Titolare"],
               ["legalName", "Ragione sociale"],
               ["vat", "Partita IVA"],
               ["address", "Indirizzo"],

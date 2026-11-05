@@ -1,15 +1,8 @@
 import type { ReactNode } from "react";
-import {
-  CalendarDays,
-  Camera,
-  CreditCard,
-  FileText,
-  History,
-  Lock,
-  Scissors,
-  Sparkles
-} from "lucide-react";
+import { CalendarDays, Camera, CreditCard, FileText, History, Lock, Sparkles } from "lucide-react";
 import RightDrawer from "./RightDrawer";
+import ClientDiarySection from "./ClientDiarySection";
+import { useDemoWorkflow } from "../../demo/DemoWorkflowContext";
 import type { WorkflowAppointment, WorkflowClient } from "../../demo/DemoWorkflowContext";
 
 type ClientSheetDrawerProps = {
@@ -25,6 +18,8 @@ export default function ClientSheetDrawer({
   appointments,
   onClose
 }: ClientSheetDrawerProps) {
+  const { pushToast } = useDemoWorkflow();
+
   if (!client) {
     return (
       <RightDrawer open={open} title="Scheda cliente" onClose={onClose} wide>
@@ -113,21 +108,12 @@ export default function ClientSheetDrawer({
           </ul>
         </Section>
 
-        <Section icon={Scissors} title="Trattamenti">
-          <ul className="nb-clientSheetList">
-            {client.diaryPlaceholders.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </Section>
-
-        <Section icon={Camera} title="Diario Fotografico">
-          <div className="nb-clientSheetPhotos" data-client-id={client.id}>
-            <div className="nb-clientSheetPhoto">Prima trattamento</div>
-            <div className="nb-clientSheetPhoto">Dopo trattamento</div>
-            <div className="nb-clientSheetPhoto">Zone trattate</div>
-            <div className="nb-clientSheetPhoto">Follow-up programmato</div>
-          </div>
+        <Section icon={Camera} title="Diario">
+          <ClientDiarySection
+            clientId={client.id}
+            appointments={appointments}
+            onToast={pushToast}
+          />
         </Section>
 
         <Section icon={FileText} title="Documenti">

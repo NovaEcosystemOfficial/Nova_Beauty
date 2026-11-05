@@ -1,6 +1,5 @@
 import {
   AlertTriangle,
-  BarChart3,
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -17,8 +16,15 @@ import {
   Users
 } from "lucide-react";
 import clsx from "clsx";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDemoWorkflow } from "../demo/DemoWorkflowContext";
+import { listProducts } from "../data/inventoryApi";
+import {
+  buildReportDataset,
+  isInReportWindow,
+  type ReportDataset,
+  type ReportPeriod
+} from "../utils/reportDataset";
 import {
   exportCsvFile,
   exportReportPdf,
@@ -29,95 +35,30 @@ import {
   type FilterMeta
 } from "../utils/reportExport";
 
-type Period = "oggi" | "settimana" | "mese" | "anno" | "personalizzato";
-type HealthTone = "ottimo" | "attenzione" | "critico";
+type Period = ReportPeriod;
 
 const PERIODS: Array<{ id: Period; label: string }> = [
   { id: "oggi", label: "Oggi" },
   { id: "settimana", label: "Settimana" },
   { id: "mese", label: "Mese" },
-  { id: "anno", label: "Anno" },
-  { id: "personalizzato", label: "Personalizzato" }
+  { id: "anno", label: "Anno" }
 ];
 
-const OPERATORS = ["Tutti", "Fabio", "Laura", "Chiara"];
-const CABINS = ["Tutte", "Cabina 1", "Cabina 2", "Cabina 3"];
-const SERVICES = [
-  "Tutti",
-  "Pulizia viso deep",
-  "Massaggio rilassante",
-  "Epilazione gambe",
-  "Peeling enzimatico",
-  "Pressoterapia"
-];
-
-const PERIOD_FACTOR: Record<Period, number> = {
-  oggi: 0.18,
-  settimana: 1,
-  mese: 3.8,
-  anno: 42,
-  personalizzato: 0.7
-};
-
-const HEALTH: Record<Period, { tone: HealthTone; title: string; lines: string[] }> = {
-  oggi: {
-    tone: "ottimo",
-    title: "Ottimo",
-    lines: [
-      "Incasso giornata sopra media (+11%)",
-      "Agenda piena al 78% fino alle 18:00",
-      "Nessuna scorta critica aperta oggi"
-    ]
-  },
-  settimana: {
-    tone: "ottimo",
-    title: "Ottimo",
-    lines: [
-      "Incasso +14% rispetto alla settimana scorsa",
-      "Hai 6 clienti da ricontattare",
-      "3 prodotti sotto scorta"
-    ]
-  },
-  mese: {
-    tone: "attenzione",
-    title: "Attenzione",
-    lines: [
-      "Incasso +6% rispetto al mese scorso",
-      "5 clienti non tornano da oltre 90 giorni",
-      "Occupazione cabine al 72% — margine migliorabile"
-    ]
-  },
-  anno: {
-    tone: "ottimo",
-    title: "Ottimo",
-    lines: [
-      "Crescita annua solidale (+18% YoY)",
-      "Ticket medio in aumento costante",
-      "Retention clienti VIP stabile"
-    ]
-  },
-  personalizzato: {
-    tone: "critico",
-    title: "Critico",
-    lines: [
-      "Intervallo selezionato con calo −9% vs benchmark",
-      "Cancellazioni sopra soglia (12%)",
-      "Rivedi pricing e slot serali"
-    ]
-  }
-};
+const ALL_OPERATORS = "Tutti";
+const ALL_CABINS = "Tutte";
+const ALL_SERVICES = "Tutti";
 
 const CHART_META = [
   {
     id: "incassi",
     title: "Incassi nel tempo",
-    caption: "Andamento giornaliero · demo",
+    caption: "Incasso dei completati, per giorno",
     kind: "line" as const
   },
   {
     id: "servizi",
     title: "Servizi più venduti",
-    caption: "Quote sul totale · demo",
+    caption: "Quota sul totale del periodo",
     kind: "bars" as const
   },
   {
@@ -128,8 +69,8 @@ const CHART_META = [
   },
   {
     id: "pagamenti",
-    title: "Metodo di pagamento",
-    caption: "Ripartizione incassi",
+    title: "Incasso registrato",
+    caption: "Solo gli appuntamenti completati",
     kind: "donut" as const
   },
   {
@@ -146,86 +87,30 @@ const CHART_META = [
   }
 ];
 
-const INSIGHTS = [
-  {
-    title: "Picco settimanale",
-    text: "Il martedì è il giorno con più appuntamenti.",
-    icon: CalendarDays
-  },
-  {
-    title: "Trend servizio",
-    text: 'Il servizio "Pulizia Viso" è cresciuto del 18%.',
-    icon: TrendingUp
-  },
-  {
-    title: "Cabine",
-    text: "Le cabine risultano occupate per il 72%.",
-    icon: BarChart3
-  },
-  {
-    title: "Retention",
-    text: "5 clienti non tornano da oltre 90 giorni.",
-    icon: Users
-  }
-];
-
-const FALLBACK_ACTIVITY = [
-  { id: "r1", time: "17:20", text: "Pagamento registrato · €65 · Carta" },
-  { id: "r2", time: "16:45", text: "Appuntamento prenotato · Giulia Rossi" },
-  { id: "r3", time: "15:10", text: "Nuovo cliente creato · Chiara Ferri" },
-  { id: "r4", time: "14:02", text: "Prodotto scaricato · Siero vitamina C" },
-  { id: "r5", time: "12:30", text: "Pagamento registrato · €55 · Contanti" },
-  { id: "r6", time: "11:05", text: "Appuntamento completato · Massaggio" },
-  { id: "r7", time: "10:15", text: "Magazzino · carico Crema viso" },
-  { id: "r8", time: "09:40", text: "Nuovo appuntamento · Sara Bianchi" }
-];
-
 function euro(n: number): string {
   return `€${n.toLocaleString("it-IT", { maximumFractionDigits: 0 })}`;
 }
 
-function filterScale(operator: string, cabin: string, service: string): number {
-  let s = 1;
-  if (operator !== "Tutti") s *= 0.42;
-  if (cabin !== "Tutte") s *= 0.55;
-  if (service !== "Tutti") s *= 0.38;
-  return s;
-}
-
-function buildDataset(
-  period: Period,
-  operator: string,
-  cabin: string,
-  service: string
-) {
-  const pf = PERIOD_FACTOR[period];
-  const fs = filterScale(operator, cabin, service);
-  const m = pf * fs;
-
-  const incasso = Math.round(4280 * m);
-  const appt = Math.max(1, Math.round(86 * m));
-  const nuovi = Math.max(0, Math.round(12 * m));
-  const ticket = Math.round((4980 * (service === "Tutti" ? 1 : 1.05)) / 100);
-  const ore = Math.max(1, Math.round(128 * m));
-  const prodotti = Math.max(0, Math.round(47 * m));
-
+function presentReport(source: ReportDataset) {
+  const incasso = source.completedCount ? source.incassoCompleted : source.incassoExpected;
+  const ticket = Math.round(source.averageTicket);
   const kpi = [
     {
       id: "incasso",
       label: "Incasso",
-      value: euro(incasso),
-      raw: incasso,
-      delta: "+14%",
-      hint: "vs periodo precedente",
+      value: euro(Math.round(incasso)),
+      raw: Math.round(incasso),
+      delta: source.completedCount ? "fatto" : "previsto",
+      hint: source.completedCount ? "appuntamenti completati" : "ancora da completare",
       icon: Euro,
       tone: "rose" as const
     },
     {
       id: "appt",
       label: "Appuntamenti",
-      value: String(appt),
-      raw: appt,
-      delta: "+9",
+      value: String(source.appointmentCount),
+      raw: source.appointmentCount,
+      delta: String(source.completedCount),
       hint: "completati nel periodo",
       icon: CalendarDays,
       tone: "mint" as const
@@ -233,191 +118,186 @@ function buildDataset(
     {
       id: "clienti",
       label: "Nuovi clienti",
-      value: String(nuovi),
-      raw: nuovi,
-      delta: "+3",
-      hint: "acquisiti",
+      value: String(source.newClients),
+      raw: source.newClients,
+      delta: "—",
+      hint: "stato nuovo in anagrafica",
       icon: UserPlus,
       tone: "gold" as const
     },
     {
       id: "ticket",
       label: "Ticket medio",
-      value: `€${(ticket / 100).toFixed(2).replace(".", ",")}`,
-      raw: ticket / 100,
-      delta: "+2,1%",
-      hint: "per appuntamento",
+      value: euro(ticket),
+      raw: ticket,
+      delta: "—",
+      hint: source.completedCount ? "sui completati" : "sul previsto",
       icon: TrendingUp,
       tone: "lavender" as const
     },
     {
       id: "ore",
-      label: "Ore lavorate",
-      value: `${ore}h`,
-      raw: ore,
-      delta: "94%",
-      hint: "occupazione teorica",
+      label: "Ore in agenda",
+      value: `${source.hours.toFixed(1).replace(".", ",")}h`,
+      raw: source.hours,
+      delta: "—",
+      hint: "durata degli appuntamenti",
       icon: Clock3,
       tone: "slate" as const
     },
     {
       id: "prodotti",
-      label: "Prodotti consumati",
-      value: String(prodotti),
-      raw: prodotti,
-      delta: "−8%",
-      hint: "unità scaricate",
+      label: "Sotto scorta",
+      value: String(source.magazzinoRows.filter((row) => row[3] !== "ok").length),
+      raw: source.magazzinoRows.filter((row) => row[3] !== "ok").length,
+      delta: "—",
+      hint: "prodotti da ordinare",
       icon: Package,
       tone: "rose" as const
     }
   ];
 
-  const days = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
-  const baseIncassi = [520, 780, 640, 910, 860, 420, 150];
-  const incassiRows = days.map((d, i) => [
-    d,
-    Math.round(baseIncassi[i] * m * (0.85 + (i % 3) * 0.08))
-  ]);
-
-  let serviziRows: Array<[string, number, string]> = [
-    ["Pulizia viso deep", Math.round(48 * m), "28%"],
-    ["Massaggio rilassante", Math.round(36 * m), "21%"],
-    ["Peeling enzimatico", Math.round(31 * m), "18%"],
-    ["Epilazione gambe", Math.round(28 * m), "16%"],
-    ["Pressoterapia", Math.round(22 * m), "13%"]
-  ];
-  if (service !== "Tutti") {
-    serviziRows = serviziRows
-      .filter((r) => r[0] === service)
-      .map((r) => [r[0], Math.max(1, Math.round(Number(r[1]) * 1.4)), "100%"]);
-  }
-
-  const acquisitiRows = days.map((d, i) => [
-    d,
-    Math.max(0, Math.round((i === 1 ? 4 : i === 4 ? 3 : 1) * m))
-  ]);
-
-  const pagamentiRows: Array<[string, number, string]> = [
-    ["Carta", Math.round(incasso * 0.54), "54%"],
-    ["Contanti", Math.round(incasso * 0.28), "28%"],
-    ["Bonifico", Math.round(incasso * 0.18), "18%"]
-  ];
-
-  const fasce = ["09–11", "11–13", "13–15", "15–17", "17–19", "19–21"];
-  const occupazioneRows = fasce.map((f, i) => {
-    const pct = Math.min(98, Math.round([42, 68, 35, 78, 88, 55][i] * (cabin === "Tutte" ? 1 : 0.9)));
-    return [f, `${pct}%`, pct];
-  });
-
-  let operatoriRows: Array<[string, number, number, string]> = [
-    ["Laura", Math.round(2140 * m), Math.round(38 * m), "4.8"],
-    ["Fabio", Math.round(1680 * m), Math.round(32 * m), "4.9"],
-    ["Chiara", Math.round(460 * m), Math.round(12 * m), "4.6"]
-  ];
-  if (operator !== "Tutti") {
-    operatoriRows = operatoriRows.filter((r) => r[0] === operator);
-  }
-
-  let topClienti = [
-    { name: "Marta Greco", meta: euro(Math.round(1890 * m)), rank: 1, value: Math.round(1890 * m) },
-    { name: "Giulia Rossi", meta: euro(Math.round(1240 * m)), rank: 2, value: Math.round(1240 * m) },
-    { name: "Sara Bianchi", meta: euro(Math.round(860 * m)), rank: 3, value: Math.round(860 * m) },
-    { name: "Elena Conti", meta: euro(Math.round(620 * m)), rank: 4, value: Math.round(620 * m) },
-    { name: "Valentina Russo", meta: euro(Math.round(540 * m)), rank: 5, value: Math.round(540 * m) }
-  ];
-
-  let topServizi = [
-    { name: "Pulizia viso deep", meta: `${Math.round(48 * m)} vendite`, rank: 1, value: Math.round(48 * m) },
-    { name: "Massaggio rilassante", meta: `${Math.round(36 * m)} vendite`, rank: 2, value: Math.round(36 * m) },
-    { name: "Peeling enzimatico", meta: `${Math.round(31 * m)} vendite`, rank: 3, value: Math.round(31 * m) },
-    { name: "Epilazione gambe", meta: `${Math.round(28 * m)} vendite`, rank: 4, value: Math.round(28 * m) },
-    { name: "Pressoterapia", meta: `${Math.round(22 * m)} vendite`, rank: 5, value: Math.round(22 * m) }
-  ];
-  if (service !== "Tutti") {
-    topServizi = topServizi
-      .filter((r) => r.name === service)
-      .map((r, i) => ({ ...r, rank: i + 1 }));
-  }
-
-  const topProdotti = [
-    { name: "Crema viso idratante", meta: `${Math.round(42 * m)} usi`, rank: 1, value: Math.round(42 * m) },
-    { name: "Siero vitamina C", meta: `${Math.round(31 * m)} usi`, rank: 2, value: Math.round(31 * m) },
-    { name: "Olio mandorle", meta: `${Math.round(27 * m)} usi`, rank: 3, value: Math.round(27 * m) },
-    { name: "Maschera argilla", meta: `${Math.round(24 * m)} usi`, rank: 4, value: Math.round(24 * m) },
-    { name: "Cera liposolubile", meta: `${Math.round(19 * m)} usi`, rank: 5, value: Math.round(19 * m) }
-  ];
-
-  let topOperatori = [
-    { name: "Laura", meta: euro(Math.round(2140 * m)), rank: 1, value: Math.round(2140 * m) },
-    { name: "Fabio", meta: euro(Math.round(1680 * m)), rank: 2, value: Math.round(1680 * m) },
-    { name: "Chiara", meta: euro(Math.round(460 * m)), rank: 3, value: Math.round(460 * m) },
-    { name: "Guest · Marta", meta: euro(0), rank: 4, value: 0 },
-    { name: "— slot libero", meta: "—", rank: 5, value: 0 }
-  ];
-  if (operator !== "Tutti") {
-    topOperatori = topOperatori
-      .filter((r) => r.name === operator)
-      .map((r, i) => ({ ...r, rank: i + 1 }));
-  }
-
-  const magazzinoRows: Array<[string, number, number, string]> = [
-    ["Crema viso idratante", Math.round(42 * m), 18, "ok"],
-    ["Siero vitamina C", Math.round(31 * m), 11, "ok"],
-    ["Olio mandorle", Math.round(27 * m), 9, "ok"],
-    ["Maschera argilla", Math.round(24 * m), 4, "bassa"],
-    ["Cera liposolubile", Math.round(19 * m), 0, "esaurito"]
-  ];
-
   return {
     kpi,
-    incassiRows,
-    serviziRows,
-    acquisitiRows,
-    pagamentiRows,
-    occupazioneRows,
-    operatoriRows,
+    incassiRows: source.incassiRows,
+    serviziRows: source.serviziRows,
+    acquisitiRows: source.acquisitiRows,
+    pagamentiRows: source.pagamentiRows,
+    occupazioneRows: source.occupazioneRows,
+    operatoriRows: source.operatoriRows,
     rankings: [
-      { id: "clienti", title: "Top 5 Clienti", rows: topClienti },
-      { id: "servizi", title: "Top 5 Servizi", rows: topServizi },
-      { id: "prodotti", title: "Top 5 Prodotti", rows: topProdotti },
-      { id: "operatori", title: "Top 5 Operatori", rows: topOperatori }
+      { id: "clienti", title: "Top clienti", rows: source.topClienti },
+      { id: "servizi", title: "Top servizi", rows: source.topServizi },
+      { id: "prodotti", title: "Scorte da ordinare", rows: source.topProdotti },
+      { id: "operatori", title: "Operatori", rows: source.topOperatori }
     ],
-    magazzinoRows,
-    clientiSheet: topClienti.map((r) => [r.rank, r.name, r.value]),
-    serviziSheet: topServizi.map((r) => [r.rank, r.name, r.value]),
-    operatoriSheet: operatoriRows.map((r) => [r[0], r[1], r[2], r[3]])
+    magazzinoRows: source.magazzinoRows,
+    clientiSheet: source.topClienti.map((row) => [row.rank, row.name, row.value]),
+    serviziSheet: source.topServizi.map((row) => [row.rank, row.name, row.value]),
+    operatoriSheet: source.operatoriRows.map((row) => [row[0], row[1], row[2], row[3]]),
+    health: source.health
   };
 }
 
 export default function ReportsWorkspace() {
-  const { activities, reportsPulse, revenueCompleted, appointmentsToday, pushToast } =
-    useDemoWorkflow();
+  const { reportsPulse, appointments, clients, pushToast } = useDemoWorkflow();
   const [period, setPeriod] = useState<Period>("settimana");
-  const [operator, setOperator] = useState(OPERATORS[0]);
-  const [cabin, setCabin] = useState(CABINS[0]);
-  const [service, setService] = useState(SERVICES[0]);
+  const [operator, setOperator] = useState(ALL_OPERATORS);
+  const [cabin, setCabin] = useState(ALL_CABINS);
+  const [service, setService] = useState(ALL_SERVICES);
+  const [products, setProducts] = useState<Array<{ name: string; quantity: number; minQuantity: number }>>(
+    []
+  );
 
-  const health = HEALTH[period];
   const periodLabel = PERIODS.find((p) => p.id === period)?.label ?? period;
+  const operatorOptions = useMemo(
+    () => [ALL_OPERATORS, ...new Set(appointments.map((item) => item.operator).filter(Boolean))],
+    [appointments]
+  );
+  const cabinOptions = useMemo(
+    () => [ALL_CABINS, ...new Set(appointments.map((item) => item.cabin).filter(Boolean))],
+    [appointments]
+  );
+  const serviceOptions = useMemo(
+    () => [ALL_SERVICES, ...new Set(appointments.map((item) => item.service).filter(Boolean))],
+    [appointments]
+  );
 
   const meta: FilterMeta = useMemo(
     () => ({ periodLabel, operator, cabin, service }),
     [periodLabel, operator, cabin, service]
   );
 
+  useEffect(() => {
+    void (async () => {
+      const result = await listProducts();
+      if (!result.ok) return;
+      setProducts(
+        result.data.map((product) => ({
+          name: product.name,
+          quantity: product.quantity,
+          minQuantity: product.minQuantity
+        }))
+      );
+    })();
+  }, []);
+
   const data = useMemo(
-    () => buildDataset(period, operator, cabin, service),
-    [period, operator, cabin, service]
+    () =>
+      presentReport(
+        buildReportDataset({
+          appointments,
+          clients,
+          products,
+          period,
+          operator,
+          cabin,
+          service
+        })
+      ),
+    [appointments, cabin, clients, operator, period, products, service]
+  );
+  const health = data.health;
+
+  const timeline = useMemo(
+    () =>
+      appointments
+        .filter(
+          (appointment) =>
+            isInReportWindow(appointment, appointments, period) &&
+            (operator === ALL_OPERATORS || appointment.operator === operator) &&
+            (cabin === ALL_CABINS || appointment.cabin === cabin) &&
+            (service === ALL_SERVICES || appointment.service === service)
+        )
+        .sort((a, b) => b.dayOffset - a.dayOffset || b.startMin - a.startMin)
+        .slice(0, 8)
+        .map((appointment) => ({
+          id: appointment.id,
+          time: appointment.timeLabel,
+          text: `${
+            appointment.status === "completato"
+              ? "Completato"
+              : appointment.status === "annullato"
+                ? "Annullato"
+                : "In agenda"
+          } · ${appointment.client} · ${appointment.service}`
+        })),
+    [appointments, cabin, operator, period, service]
   );
 
-  const timeline = useMemo(() => {
-    if (activities.length === 0) return FALLBACK_ACTIVITY;
-    return activities.slice(0, 8).map((a) => ({
-      id: a.id,
-      time: a.time,
-      text: a.text
-    }));
-  }, [activities]);
+  const insights = useMemo(() => {
+    const topService = data.serviziRows[0];
+    const topOperator = data.operatoriRows[0];
+    const lowStock = data.magazzinoRows.filter((row) => row[3] !== "ok").length;
+    return [
+      {
+        title: "Servizio",
+        text: topService
+          ? `${topService[0]} · ${topService[1]} appuntamenti (${topService[2]})`
+          : "Nessun servizio nel periodo",
+        icon: TrendingUp
+      },
+      {
+        title: "Operatore",
+        text: topOperator
+          ? `${topOperator[0]} · ${euro(Number(topOperator[1]))} · ${topOperator[2]} appuntamenti`
+          : "Nessun operatore nel periodo",
+        icon: Users
+      },
+      {
+        title: "Magazzino",
+        text: lowStock
+          ? `${lowStock} prodotti sotto la scorta minima`
+          : "Nessun prodotto sotto scorta",
+        icon: Package
+      },
+      {
+        title: "Agenda",
+        text: health.lines[2] ?? "Nessun annullamento",
+        icon: CalendarDays
+      }
+    ];
+  }, [data.magazzinoRows, data.operatoriRows, data.serviziRows, health.lines]);
 
   const HealthIcon =
     health.tone === "ottimo"
@@ -455,7 +335,7 @@ export default function ReportsWorkspace() {
           rows: data.serviziRows
         },
         {
-          heading: "Metodo di pagamento",
+          heading: "Incasso registrato",
           headers: ["Metodo", "Importo €", "Quota"],
           rows: data.pagamentiRows
         },
@@ -466,8 +346,8 @@ export default function ReportsWorkspace() {
         },
         {
           heading: "Operatori",
-          headers: ["Operatore", "Incasso €", "Appuntamenti", "Rating"],
-          rows: data.operatoriRows
+          headers: ["Operatore", "Incasso €", "Appuntamenti"],
+          rows: data.operatoriRows.map((row) => [row[0], row[1], row[2]])
         },
         {
           heading: "Top Clienti",
@@ -480,8 +360,8 @@ export default function ReportsWorkspace() {
           rows: data.serviziSheet
         },
         {
-          heading: "Top Prodotti",
-          headers: ["#", "Prodotto", "Usi"],
+          heading: "Scorte da ordinare",
+          headers: ["#", "Prodotto", "Priorità"],
           rows: data.rankings[2].rows.map((r) => [r.rank, r.name, r.value])
         },
         {
@@ -524,12 +404,12 @@ export default function ReportsWorkspace() {
         },
         {
           name: "Operatori",
-          headers: ["Operatore", "Incasso €", "Appuntamenti", "Rating"],
-          rows: data.operatoriRows
+          headers: ["Operatore", "Incasso €", "Appuntamenti"],
+          rows: data.operatoriRows.map((row) => [row[0], row[1], row[2]])
         },
         {
           name: "Magazzino",
-          headers: ["Prodotto", "Consumi", "Giacenza", "Stato"],
+          headers: ["Prodotto", "Giacenza", "Minimo", "Stato"],
           rows: data.magazzinoRows
         }
       ]
@@ -579,8 +459,8 @@ export default function ReportsWorkspace() {
       case "operatori":
         exportCsvFile(
           `${base}.csv`,
-          ["Operatore", "Incasso €", "Appuntamenti", "Rating"],
-          data.operatoriRows
+          ["Operatore", "Incasso €", "Appuntamenti"],
+          data.operatoriRows.map((row) => [row[0], row[1], row[2]])
         );
         pushToast("Esportate statistiche operatori · CSV");
         break;
@@ -603,8 +483,7 @@ export default function ReportsWorkspace() {
           </div>
           <h2 className="nb-rpTitle">Andamento del centro estetico</h2>
           <p className="nb-rpSub">
-            Panoramica demo · {appointmentsToday} appuntamenti oggi · incasso completato €
-            {revenueCompleted}
+            Report sugli appuntamenti salvati · {data.kpi[1]?.value ?? "0"} nel periodo selezionato
           </p>
         </div>
 
@@ -644,7 +523,7 @@ export default function ReportsWorkspace() {
           <label className="nb-rpFilter">
             <span>Operatore</span>
             <select value={operator} onChange={(e) => setOperator(e.target.value)}>
-              {OPERATORS.map((o) => (
+              {operatorOptions.map((o) => (
                 <option key={o} value={o}>
                   {o}
                 </option>
@@ -654,7 +533,7 @@ export default function ReportsWorkspace() {
           <label className="nb-rpFilter">
             <span>Cabina</span>
             <select value={cabin} onChange={(e) => setCabin(e.target.value)}>
-              {CABINS.map((c) => (
+              {cabinOptions.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
@@ -664,7 +543,7 @@ export default function ReportsWorkspace() {
           <label className="nb-rpFilter">
             <span>Servizio</span>
             <select value={service} onChange={(e) => setService(e.target.value)}>
-              {SERVICES.map((s) => (
+              {serviceOptions.map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -731,7 +610,7 @@ export default function ReportsWorkspace() {
             ))}
           </ul>
           <p className="nb-rpHealthFoot">
-            Sintesi demo · filtri {operator} · {cabin} · {service}
+            Sintesi del periodo · {periodLabel} · {operator} · {cabin} · {service}
           </p>
         </article>
       </section>
@@ -740,7 +619,7 @@ export default function ReportsWorkspace() {
         <SectionHead
           id="rp-charts"
           title="Grafici"
-          caption="Placeholder professionali · dati demo"
+          caption="Le altezze e le quote seguono i totali del periodo."
         />
         <div className="nb-rpChartGrid">
           {CHART_META.map((c) => (
@@ -760,7 +639,7 @@ export default function ReportsWorkspace() {
                 </button>
               </header>
               <div className="nb-rpChartBody">
-                <ChartPlaceholder kind={c.kind} />
+                <ChartPlaceholder kind={c.kind} series={seriesForChart(c.id, data)} />
               </div>
             </article>
           ))}
@@ -790,17 +669,21 @@ export default function ReportsWorkspace() {
                   Esporta
                 </button>
               </div>
-              <ol className="nb-rpRankList">
-                {block.rows.map((row) => (
-                  <li key={row.name} className="nb-rpRankRow">
-                    <span className={clsx("nb-rpRankBadge", row.rank <= 3 && "isTop")}>
-                      {row.rank}
-                    </span>
-                    <span className="nb-rpRankName">{row.name}</span>
-                    <span className="nb-rpRankMeta">{row.meta}</span>
-                  </li>
-                ))}
-              </ol>
+              {block.rows.length === 0 ? (
+                <p className="nb-rpRankMeta">Nessun dato nel periodo</p>
+              ) : (
+                <ol className="nb-rpRankList">
+                  {block.rows.map((row) => (
+                    <li key={row.name} className="nb-rpRankRow">
+                      <span className={clsx("nb-rpRankBadge", row.rank <= 3 && "isTop")}>
+                        {row.rank}
+                      </span>
+                      <span className="nb-rpRankName">{row.name}</span>
+                      <span className="nb-rpRankMeta">{row.meta}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </article>
           ))}
         </div>
@@ -809,21 +692,25 @@ export default function ReportsWorkspace() {
       <section className="nb-rpSection" aria-labelledby="rp-timeline">
         <SectionHead
           id="rp-timeline"
-          title="Timeline attività"
-          caption="Ultime operazioni del centro"
+          title="Timeline"
+          caption="Appuntamenti del periodo selezionato"
         />
         <div className="nb-rpTimeline">
-          {timeline.map((item, i) => (
-            <div
-              key={item.id}
-              className="nb-rpTimelineItem"
-              style={{ animationDelay: `${i * 40}ms` }}
-            >
-              <span className="nb-rpTimelineTime">{item.time}</span>
-              <span className="nb-rpTimelineDot" aria-hidden={true} />
-              <span className="nb-rpTimelineText">{item.text}</span>
-            </div>
-          ))}
+          {timeline.length === 0 ? (
+            <p className="nb-rpRankMeta">Nessun appuntamento nel periodo</p>
+          ) : (
+            timeline.map((item, i) => (
+              <div
+                key={item.id}
+                className="nb-rpTimelineItem"
+                style={{ animationDelay: `${i * 40}ms` }}
+              >
+                <span className="nb-rpTimelineTime">{item.time}</span>
+                <span className="nb-rpTimelineDot" aria-hidden={true} />
+                <span className="nb-rpTimelineText">{item.text}</span>
+              </div>
+            ))
+          )}
         </div>
       </section>
 
@@ -831,10 +718,10 @@ export default function ReportsWorkspace() {
         <SectionHead
           id="rp-insight"
           title="Insight"
-          caption="Segnali intelligenti · solo UI demo"
+          caption="Lettura dei numeri del periodo"
         />
         <div className="nb-rpInsightGrid">
-          {INSIGHTS.map((ins) => {
+          {insights.map((ins) => {
             const Icon = ins.icon;
             return (
               <article key={ins.title} className="nb-rpInsight">
@@ -874,14 +761,73 @@ function SectionHead({
   );
 }
 
+type ChartPoint = { label: string; value: number };
+
+function seriesForChart(
+  id: string,
+  source: {
+    incassiRows: Array<[string, number]>;
+    serviziRows: Array<[string, number, string]>;
+    acquisitiRows: Array<[string, number]>;
+    pagamentiRows: Array<[string, number, string]>;
+    occupazioneRows: Array<[string, string, number]>;
+    operatoriRows: Array<[string, number, number, string]>;
+  }
+): ChartPoint[] {
+  switch (id) {
+    case "incassi":
+      return source.incassiRows.map(([label, value]) => ({ label, value }));
+    case "servizi":
+      return source.serviziRows.map(([label, value]) => ({ label, value }));
+    case "acquisiti":
+      return source.acquisitiRows.map(([label, value]) => ({ label, value }));
+    case "pagamenti":
+      return source.pagamentiRows.map(([label, value]) => ({ label, value }));
+    case "occupazione":
+      return source.occupazioneRows.map(([label, , value]) => ({ label, value }));
+    case "operatori":
+      return source.operatoriRows.map(([label, value]) => ({ label, value }));
+    default:
+      return [];
+  }
+}
+
+function chartLine(series: ChartPoint[]) {
+  const max = Math.max(1, ...series.map((point) => point.value));
+  const points = series.map((point, index) => {
+    const x = series.length === 1 ? 180 : (index / (series.length - 1)) * 360;
+    const y = 120 - (point.value / max) * 90;
+    return { ...point, x, y };
+  });
+  const line = points
+    .map((point, index) => `${index === 0 ? "M" : "L"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(" ");
+  const area =
+    points.length > 0
+      ? `${line} L${points[points.length - 1].x.toFixed(1)} 140 L${points[0].x.toFixed(1)} 140 Z`
+      : "";
+  return { points, line, area };
+}
+
 function ChartPlaceholder({
-  kind
+  kind,
+  series
 }: {
   kind: "line" | "bars" | "area" | "donut" | "heat" | "columns";
+  series: ChartPoint[];
 }) {
+  const visible = series.filter((point) => point.value > 0);
+  if (visible.length === 0) {
+    return <p className="nb-rpRankMeta">Nessun dato nel periodo</p>;
+  }
+
   if (kind === "line" || kind === "area") {
+    const geometry = chartLine(visible);
     return (
-      <svg className="nb-rpSvg" viewBox="0 0 360 140" preserveAspectRatio="none" aria-hidden={true}>
+      <svg className="nb-rpSvg" viewBox="0 0 360 140" preserveAspectRatio="none" role="img">
+        <title>
+          {visible.map((point) => `${point.label} ${point.value}`).join(", ")}
+        </title>
         <defs>
           <linearGradient id={`rp-grad-${kind}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="rgba(196,138,151,0.35)" />
@@ -889,65 +835,66 @@ function ChartPlaceholder({
           </linearGradient>
         </defs>
         <path className="nb-rpSvgGrid" d="M0 35 H360 M0 70 H360 M0 105 H360" />
-        {kind === "area" ? (
-          <path
-            fill={`url(#rp-grad-${kind})`}
-            d="M0 110 L40 95 L80 100 L120 70 L160 78 L200 48 L240 58 L280 36 L320 44 L360 28 L360 140 L0 140 Z"
-          />
-        ) : null}
-        <path
-          className="nb-rpSvgLine"
-          fill="none"
-          d="M0 110 L40 95 L80 100 L120 70 L160 78 L200 48 L240 58 L280 36 L320 44 L360 28"
-        />
-        {[40, 120, 200, 280, 360].map((x, i) => (
-          <circle key={x} className="nb-rpSvgDot" cx={x} cy={[95, 70, 48, 36, 28][i]} r="3.5" />
+        {kind === "area" ? <path fill={`url(#rp-grad-${kind})`} d={geometry.area} /> : null}
+        <path className="nb-rpSvgLine" fill="none" d={geometry.line} />
+        {geometry.points.map((point) => (
+          <circle key={point.label} className="nb-rpSvgDot" cx={point.x} cy={point.y} r="3.5">
+            <title>
+              {point.label} · {point.value}
+            </title>
+          </circle>
         ))}
       </svg>
     );
   }
 
   if (kind === "donut") {
+    const total = visible.reduce((sum, point) => sum + point.value, 0) || 1;
     return (
       <div className="nb-rpDonutWrap">
         <svg className="nb-rpDonut" viewBox="0 0 120 120" aria-hidden={true}>
           <circle className="nb-rpDonutTrack" cx="60" cy="60" r="42" />
           <circle className="nb-rpDonutSeg s1" cx="60" cy="60" r="42" />
-          <circle className="nb-rpDonutSeg s2" cx="60" cy="60" r="42" />
-          <circle className="nb-rpDonutSeg s3" cx="60" cy="60" r="42" />
         </svg>
         <div className="nb-rpDonutLegend">
-          <span>
-            <i className="t1" /> Carta 54%
-          </span>
-          <span>
-            <i className="t2" /> Contanti 28%
-          </span>
-          <span>
-            <i className="t3" /> Bonifico 18%
-          </span>
+          {visible.map((point, index) => (
+            <span key={point.label}>
+              <i className={index % 2 === 0 ? "t1" : "t2"} /> {point.label}{" "}
+              {Math.round((point.value / total) * 100)}%
+            </span>
+          ))}
         </div>
       </div>
     );
   }
 
   if (kind === "heat") {
-    const cells = [0.3, 0.5, 0.7, 0.9, 0.6, 0.4, 0.8, 0.95, 0.55, 0.35, 0.65, 0.75];
+    const max = Math.max(1, ...visible.map((point) => point.value));
     return (
-      <div className="nb-rpHeat" aria-hidden={true}>
-        {cells.map((v, i) => (
-          <span key={i} style={{ opacity: 0.25 + v * 0.75 }} />
+      <div className="nb-rpHeat">
+        {visible.map((point) => (
+          <span
+            key={point.label}
+            title={`${point.label} · ${point.value}%`}
+            style={{ opacity: 0.25 + (point.value / max) * 0.75 }}
+          />
         ))}
       </div>
     );
   }
 
-  const bars = kind === "columns" ? [42, 68, 55, 80, 36, 62] : [78, 64, 52, 44, 36, 28];
-
+  const max = Math.max(1, ...visible.map((point) => point.value));
   return (
-    <div className={clsx("nb-rpBars", kind === "columns" && "isColumns")} aria-hidden={true}>
-      {bars.map((h, i) => (
-        <span key={i} style={{ height: `${h}%`, animationDelay: `${i * 60}ms` }} />
+    <div className={clsx("nb-rpBars", kind === "columns" && "isColumns")}>
+      {visible.map((point, index) => (
+        <span
+          key={point.label}
+          title={`${point.label} · ${point.value}`}
+          style={{
+            height: `${Math.max(8, Math.round((point.value / max) * 100))}%`,
+            animationDelay: `${index * 60}ms`
+          }}
+        />
       ))}
     </div>
   );

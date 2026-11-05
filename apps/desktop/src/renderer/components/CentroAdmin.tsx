@@ -258,7 +258,7 @@ const CABINS = ["Cabina 1", "Cabina 2", "Cabina 3", "Non assegnata"];
 const SERVICES = ["Viso", "Corpo", "Massaggi", "Epilazione", "Mani", "Piedi"];
 
 export default function CentroAdmin() {
-  const { studioName, studioLogoUrl, pushToast } = useDemoWorkflow();
+  const { studioName, studioOwner, studioLogoUrl, pushToast } = useDemoWorkflow();
   const [team, setTeam] = useState(TEAM);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [permTarget, setPermTarget] = useState(TEAM[0].name);
@@ -427,7 +427,7 @@ export default function CentroAdmin() {
             <div className="nb-centroStudioTop">
               <div>
                 <h3 className="nb-centroStudioName">{studioName}</h3>
-                <p className="nb-centroStudioOwner">Titolare · {STUDIO.owner}</p>
+                <p className="nb-centroStudioOwner">Titolare · {studioOwner.trim() || "Da inserire"}</p>
               </div>
               <button type="button" className="nb-centroGhostBtn" disabled>
                 <Pencil className="nb-centroBtnIcon" aria-hidden={true} />

@@ -307,6 +307,9 @@ input {
   font-size: 13px;
   font-weight: 750;
   letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nb-sidebarUserRole {
@@ -314,6 +317,9 @@ input {
   font-size: 11px;
   color: var(--nb-muted);
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nb-sidebarUserStatus {
@@ -3422,6 +3428,118 @@ input {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.nb-diary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nb-diaryHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nb-diaryComposer,
+.nb-diaryEntry {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--nb-border);
+  background: var(--nb-elevated);
+}
+
+.nb-diaryList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nb-diaryEntryTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nb-diaryEntryTitle {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.nb-diaryEntryMeta,
+.nb-diaryEntryBody {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--nb-muted);
+}
+
+.nb-diaryTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.nb-diaryTag {
+  border: 1px solid var(--nb-border);
+  background: transparent;
+  color: var(--nb-muted);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.nb-diaryTag.isOn {
+  border-color: color-mix(in srgb, var(--nb-primary) 45%, var(--nb-border));
+  background: color-mix(in srgb, var(--nb-primary) 12%, transparent);
+  color: var(--nb-text);
+}
+
+.nb-diaryPhotoPicks {
+  display: flex;
+  gap: 8px;
+}
+
+.nb-diaryPhotoPick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nb-diaryPhotoPick input {
+  display: none;
+}
+
+.nb-diaryPhotoPick svg,
+.nb-diaryDelete svg {
+  width: 14px;
+  height: 14px;
+}
+
+.nb-diaryDelete {
+  border: 0;
+  background: transparent;
+  color: var(--nb-muted);
+  cursor: pointer;
+}
+
+.nb-diaryPhoto {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
 }
 
 .nb-clientSheetPhoto {
@@ -16682,6 +16800,30 @@ html[data-theme="dark"] .nb-newBtn {
   color: var(--nb-muted);
   font-weight: 500;
   max-width: 52ch;
+}
+
+.nb-infoSample {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-radius: var(--nb-radius-xl);
+  border: 1px solid var(--nb-border);
+  background: var(--nb-elevated);
+}
+
+.nb-infoSampleText {
+  margin: 6px 0 0;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--nb-muted);
+}
+
+.nb-infoSample .nb-newBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .nb-infoStatus {

@@ -311,7 +311,6 @@ export class InventoryService {
 
   list(query: ProductListQuery = {}): IpcResult<ProductDto[]> {
     try {
-      this.ensureDemoSeed();
       return { ok: true, data: this.repo().listProducts(query).map((p) => p.toDto()) };
     } catch (error) {
       return wrapError(error);

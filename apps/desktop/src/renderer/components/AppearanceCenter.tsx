@@ -58,7 +58,6 @@ const STUDIO_STYLES: StudioStyle[] = OFFICIAL_STUDIO_STYLES.map((s) => ({
 
 const ECOSYSTEM_APPS = ["NovaBeauty", "NovaDocs", "NovaPromo"];
 
-const SLOGAN_KEY = "nb-studio-slogan-v1";
 const LOGIN_ASSETS_KEY = "nb-studio-login-assets-v1";
 
 function storedToStudioStyle(s: StoredCustomStyle): StudioStyle {
@@ -82,14 +81,15 @@ function storedToStudioStyle(s: StoredCustomStyle): StudioStyle {
 export default function AppearanceCenter() {
   const {
     studioName,
-    setStudioName,
+    studioSlogan,
     studioLogoUrl,
     setStudioLogoUrl,
+    saveStudioIdentity,
     pushToast
   } = useDemoWorkflow();
   const { activeStyleId, applyPalette } = useStudioTheme();
 
-  const [slogan, setSlogan] = useState(() => localStorage.getItem(SLOGAN_KEY) ?? "Bellezza · Cura · Presenza");
+  const [slogan, setSlogan] = useState(studioSlogan);
   const [customStyles, setCustomStyles] = useState<StoredCustomStyle[]>(() => loadCustomStyles());
   const [styleId, setStyleId] = useState(activeStyleId);
   const [editingCustomId, setEditingCustomId] = useState<string | null>(null);
@@ -195,8 +195,8 @@ export default function AppearanceCenter() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(SLOGAN_KEY, slogan);
-  }, [slogan]);
+    setSlogan(studioSlogan);
+  }, [studioSlogan]);
 
   const persistLoginAssets = (logo: string | null, bg: string | null) => {
     localStorage.setItem(LOGIN_ASSETS_KEY, JSON.stringify({ logo, bg }));
@@ -383,9 +383,9 @@ export default function AppearanceCenter() {
 
   const saveNameDialog = () => {
     const nextName = draftName.trim() || studioName;
-    const nextSlogan = draftSlogan.trim() || slogan;
-    setStudioName(nextName);
+    const nextSlogan = draftSlogan.trim();
     setSlogan(nextSlogan);
+    void saveStudioIdentity({ name: nextName, slogan: nextSlogan });
     setNameDialogOpen(false);
     pushToast("Identità aggiornata.");
   };
@@ -911,7 +911,7 @@ export default function AppearanceCenter() {
             <h3 id="ss-name-title" className="nb-dialogTitle">
               Modifica Nome
             </h3>
-            <p className="nb-dialogSub">Aggiorna nome studio e slogan (demo locale).</p>
+            <p className="nb-dialogSub">Aggiorna nome studio e slogan.</p>
             <label className="nb-ssField">
               <span>Nome studio</span>
               <input value={draftName} onChange={(e) => setDraftName(e.target.value)} autoFocus />

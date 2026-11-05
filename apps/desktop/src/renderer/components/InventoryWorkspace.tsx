@@ -122,7 +122,8 @@ export default function InventoryWorkspace() {
     inventoryFocusCode,
     clearInventoryFocus,
     openSupplierModule,
-    reloadSuppliers
+    reloadSuppliers,
+    sampleRevision
   } = useDemoWorkflow();
   const [products, setProducts] = useState<DemoProduct[]>([]);
   const [movementsToday, setMovementsToday] = useState(0);
@@ -192,8 +193,8 @@ export default function InventoryWorkspace() {
 
   useEffect(() => {
     void reloadInventory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- boot once
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- boot e dopo il caricamento dati di esempio
+  }, [sampleRevision]);
 
   useEffect(() => {
     if (!loaded) return;

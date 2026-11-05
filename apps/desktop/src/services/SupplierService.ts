@@ -310,7 +310,6 @@ export class SupplierService {
 
   list(query: SupplierListQuery = {}): IpcResult<SupplierDto[]> {
     try {
-      this.ensureDemoSeed();
       const products = DataEngine.getInstance().inventory.findAllProducts();
       return {
         ok: true,
